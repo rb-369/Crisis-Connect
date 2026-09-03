@@ -6,45 +6,50 @@ import {
   Radio, 
   Activity, 
   RotateCcw,
-  Users
+  Users,
+  Wifi,
+  WifiOff
 } from 'lucide-react';
 
 export default function Header({ currentTab, onTabChange, wsStatus, onReseed }) {
   const tabs = [
-    { id: 'requester', label: '1-Tap Requester', icon: AlertTriangle, badge: 'Citizen' },
-    { id: 'admin', label: 'Admin Triage', icon: ShieldAlert, badge: 'NGO' },
-    { id: 'admin-map', label: 'Crisis Map', icon: MapPin, badge: 'Live GIS' },
-    { id: 'zone-report', label: 'Report Hazard', icon: Radio, badge: 'Crowdsource' },
-    { id: 'simulator', label: 'Volunteer Simulator', icon: Users, badge: 'Dev B Mock' },
+    { id: 'requester', label: '1-Tap SOS (Citizen)', icon: AlertTriangle, mode: 'citizen' },
+    { id: 'admin', label: 'Triage Queue', icon: ShieldAlert, mode: 'ngo' },
+    { id: 'admin-map', label: 'Live GIS Map', icon: MapPin, mode: 'ngo' },
+    { id: 'zone-report', label: 'Report Hazard', icon: Radio, mode: 'citizen' },
+    { id: 'simulator', label: 'Volunteer Mock', icon: Users, mode: 'dev' },
   ];
 
   return (
-    <header className="sticky top-0 z-50 border-b border-slate-800/80 bg-slate-950/80 backdrop-blur-xl">
+    <header className="sticky top-0 z-50 bg-[#0F172A] border-b border-slate-800 shadow-md">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
           
           {/* Logo & Brand */}
-          <div className="flex items-center space-x-3 cursor-pointer" onClick={() => onTabChange('requester')}>
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-red-600 via-red-500 to-amber-500 flex items-center justify-center shadow-lg shadow-red-500/20">
-              <Activity className="w-6 h-6 text-white animate-pulse" />
+          <div 
+            className="flex items-center space-x-3 cursor-pointer group"
+            onClick={() => onTabChange('requester')}
+          >
+            <div className="w-9 h-9 rounded-xl bg-red-600 flex items-center justify-center shadow-md shadow-red-600/30 group-hover:scale-105 transition">
+              <Activity className="w-5 h-5 text-white animate-pulse" />
             </div>
             <div>
               <div className="flex items-center space-x-2">
                 <span className="font-extrabold text-lg sm:text-xl tracking-tight text-white">
                   Crisis<span className="text-red-500">Connect</span>
                 </span>
-                <span className="hidden sm:inline-flex px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wider bg-red-500/10 text-red-400 border border-red-500/20">
+                <span className="hidden sm:inline-flex px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-slate-800 text-slate-300 border border-slate-700">
                   Dev A Stack
                 </span>
               </div>
-              <p className="text-[11px] text-slate-400 font-medium leading-none hidden sm:block">
-                FastAPI + Native WebSockets + React + Supabase
+              <p className="text-[11px] text-slate-400 font-medium leading-none hidden md:block">
+                Emergency Triage & Community Aid Dispatch
               </p>
             </div>
           </div>
 
           {/* Navigation Tabs */}
-          <nav className="flex items-center space-x-1 sm:space-x-1.5 overflow-x-auto py-1 max-w-full">
+          <nav className="flex items-center space-x-1 sm:space-x-1.5 overflow-x-auto py-1">
             {tabs.map((tab) => {
               const Icon = tab.icon;
               const isActive = currentTab === tab.id;
@@ -52,30 +57,23 @@ export default function Header({ currentTab, onTabChange, wsStatus, onReseed }) 
                 <button
                   key={tab.id}
                   onClick={() => onTabChange(tab.id)}
-                  className={`relative flex items-center space-x-1.5 px-3 py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all duration-150 whitespace-nowrap ${
+                  className={`relative flex items-center space-x-1.5 px-3 py-2 rounded-lg text-xs sm:text-sm font-bold transition-all whitespace-nowrap ${
                     isActive
-                      ? 'bg-slate-800 text-white shadow-sm border border-slate-700/80'
-                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/60'
+                      ? 'bg-slate-800 text-white shadow-sm border border-slate-700'
+                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
                   }`}
                 >
-                  <Icon className={`w-4 h-4 ${isActive ? 'text-red-400' : 'text-slate-500'}`} />
+                  <Icon className={`w-4 h-4 ${isActive ? 'text-red-400' : 'text-slate-400'}`} />
                   <span>{tab.label}</span>
-                  {tab.badge && (
-                    <span className={`hidden md:inline-block text-[9px] px-1 py-0.2 rounded font-mono ${
-                      isActive ? 'bg-red-500/20 text-red-300' : 'bg-slate-800 text-slate-500'
-                    }`}>
-                      {tab.badge}
-                    </span>
-                  )}
                 </button>
               );
             })}
           </nav>
 
-          {/* Right Status & Tools */}
-          <div className="flex items-center space-x-2 sm:space-x-3">
+          {/* Right Status & Quick Reseed */}
+          <div className="flex items-center space-x-2.5">
             {/* Live WebSocket Indicator */}
-            <div className="flex items-center space-x-1.5 px-2.5 py-1 rounded-full bg-slate-900 border border-slate-800 text-xs">
+            <div className="flex items-center space-x-1.5 px-2.5 py-1 rounded-full bg-slate-800 border border-slate-700 text-xs">
               <span className={`w-2 h-2 rounded-full ${
                 wsStatus === 'connected'
                   ? 'bg-emerald-400 animate-ping-slow'
@@ -88,11 +86,11 @@ export default function Header({ currentTab, onTabChange, wsStatus, onReseed }) 
               </span>
             </div>
 
-            {/* Reseed Button */}
+            {/* Reseed Demo Button */}
             <button
               onClick={onReseed}
-              title="Reseed Realistic Demo Data"
-              className="p-2 rounded-lg text-slate-400 hover:text-white bg-slate-900 hover:bg-slate-800 border border-slate-800 transition"
+              title="Reseed Realistic Demo Incidents"
+              className="p-2 rounded-lg text-slate-400 hover:text-white bg-slate-800 hover:bg-slate-700 border border-slate-700 transition"
             >
               <RotateCcw className="w-4 h-4" />
             </button>

@@ -47,7 +47,7 @@ export default function App() {
   };
 
   const handleReseed = async () => {
-    if (window.confirm('Reset and reseed demo crisis data?')) {
+    if (window.confirm('Reset and reseed demo crisis scenarios?')) {
       try {
         await api.reseed();
         alert('Demo data reseeded with realistic emergency scenarios!');
@@ -58,9 +58,15 @@ export default function App() {
     }
   };
 
+  // Select canvas background depending on mode:
+  // - Admin Mission Control -> Cool Slate 100 (#F1F5F9)
+  // - Citizen Requester PWA -> Soft Daylight Grey (#F8FAFC)
+  const isMissionControl = currentTab === 'admin' || currentTab === 'admin-map';
+  const canvasBg = isMissionControl ? 'bg-[#F1F5F9]' : 'bg-[#F8FAFC]';
+
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans">
-      {/* Top Navigation */}
+    <div className={`min-h-screen ${canvasBg} text-[#0F172A] flex flex-col font-sans transition-colors duration-200`}>
+      {/* Dark Slate 900 Top Navigation Shell */}
       <Header
         currentTab={currentTab}
         onTabChange={setCurrentTab}
@@ -68,9 +74,9 @@ export default function App() {
         onReseed={handleReseed}
       />
 
-      {/* Main View Area */}
-      <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6">
-        {/* Requester Tab */}
+      {/* Main Content Viewport */}
+      <main className="flex-1 max-w-7xl w-full mx-auto p-3 sm:p-6 lg:px-8">
+        {/* Citizen 1-Tap Requester SOS */}
         {currentTab === 'requester' && (
           <div>
             {requesterStep === 'report' && (
@@ -94,22 +100,21 @@ export default function App() {
           </div>
         )}
 
-        {/* Admin Queue Triage Tab */}
+        {/* NGO / Dispatch Triage Queue */}
         {currentTab === 'admin' && (
           <AdminDashboard onOpenMap={() => setCurrentTab('admin-map')} />
         )}
 
-        {/* Admin Crisis GIS Map Tab */}
+        {/* Live GIS Crisis & Hazard Map */}
         {currentTab === 'admin-map' && (
           <AdminMap />
         )}
 
-        {/* Crisis Zone Pin-Drop Tab */}
+        {/* Public Crowdsourced Hazard Reporting */}
         {currentTab === 'zone-report' && (
           <ZoneReportScreen
             onReportSubmitted={(res) => {
               if (res.confirmed_zone) {
-                // If a new zone was confirmed, prompt to see it on map
                 if (window.confirm('🚨 Crisis Perimeter Confirmed! Would you like to view it on the Crisis Map?')) {
                   setCurrentTab('admin-map');
                 }
@@ -118,15 +123,15 @@ export default function App() {
           />
         )}
 
-        {/* Volunteer Simulator (Dev B Mock) */}
+        {/* Volunteer Mobile Simulator (Dev B Mock) */}
         {currentTab === 'simulator' && (
           <VolunteerMock />
         )}
       </main>
 
       {/* Footer */}
-      <footer className="border-t border-slate-900 py-4 px-6 text-center text-xs text-slate-500">
-        CrisisConnect Dev A Suite · FastAPI &bull; Native WebSockets &bull; Supabase Postgres &bull; React Vite Tailwind
+      <footer className="border-t border-[#CBD5E1] bg-white py-4 px-6 text-center text-xs text-[#64748B] font-medium">
+        CrisisConnect Dev A Suite &bull; FastAPI &bull; Native WebSockets &bull; Supabase PostgreSQL &bull; React Vite Tailwind
       </footer>
     </div>
   );

@@ -24,7 +24,7 @@ create table if not exists requests (
   updated_at timestamptz default now()
 );
 
--- Helpful indexes for query performance (following supabase-postgres-best-practices)
+-- Helpful indexes for query performance
 create index if not exists idx_requests_status on requests (status);
 create index if not exists idx_requests_admin_status on requests (admin_status);
 create index if not exists idx_requests_urgency_created on requests (urgency desc, created_at asc);
@@ -80,3 +80,31 @@ create table if not exists confirmed_zones (
   ml_status text,
   confirmed_at timestamptz default now()
 );
+
+-- Enable public access policies for anonymous crisis reporting & volunteer matching
+alter table requests enable row level security;
+alter table helpers enable row level security;
+alter table matches enable row level security;
+alter table messages enable row level security;
+alter table zone_reports enable row level security;
+alter table confirmed_zones enable row level security;
+
+create policy "Public requests read" on requests for select using (true);
+create policy "Public requests insert" on requests for insert with check (true);
+create policy "Public requests update" on requests for update using (true);
+
+create policy "Public helpers read" on helpers for select using (true);
+create policy "Public helpers insert" on helpers for insert with check (true);
+
+create policy "Public matches read" on matches for select using (true);
+create policy "Public matches insert" on matches for insert with check (true);
+create policy "Public matches update" on matches for update using (true);
+
+create policy "Public messages read" on messages for select using (true);
+create policy "Public messages insert" on messages for insert with check (true);
+
+create policy "Public zone_reports read" on zone_reports for select using (true);
+create policy "Public zone_reports insert" on zone_reports for insert with check (true);
+
+create policy "Public confirmed_zones read" on confirmed_zones for select using (true);
+create policy "Public confirmed_zones insert" on confirmed_zones for insert with check (true);

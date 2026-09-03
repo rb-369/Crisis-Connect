@@ -7,11 +7,11 @@ import {
   MapPin, 
   Clock, 
   Shield, 
-  Filter, 
   RefreshCw,
-  Search,
   CheckCircle2,
-  Users
+  Users,
+  Sparkles,
+  ShieldCheck
 } from 'lucide-react';
 import { api } from '../../services/api';
 import { CrisisWebSocketClient } from '../../services/websocket';
@@ -38,7 +38,6 @@ export default function AdminDashboard({ onOpenMap }) {
   useEffect(() => {
     fetchRequests();
 
-    // Subscribe to admin WebSocket channel to see real-time new incoming requests and status updates
     const wsClient = new CrisisWebSocketClient(
       'admin',
       'all',
@@ -46,7 +45,6 @@ export default function AdminDashboard({ onOpenMap }) {
         if (payload.event === 'new_request') {
           setRequests((prev) => {
             if (prev.some((r) => r.id === payload.data.id)) return prev;
-            // Prepend new request and re-sort urgency
             const updated = [payload.data, ...prev];
             return updated.sort((a, b) => (a.urgency === 'high' ? -1 : 1));
           });
@@ -78,56 +76,60 @@ export default function AdminDashboard({ onOpenMap }) {
   };
 
   return (
-    <div className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
-      {/* Header & Stats bar */}
+    <div className="py-2 sm:py-6">
+      {/* Top Mission Control Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
         <div>
-          <div className="flex items-center space-x-2">
-            <Shield className="w-5 h-5 text-red-500" />
-            <h1 className="text-xl sm:text-2xl font-black text-white tracking-tight">
-              NGO / Dispatch Admin Dashboard
-            </h1>
+          <div className="flex items-center space-x-2.5">
+            <div className="p-2 rounded-xl bg-[#0F172A] text-white">
+              <Shield className="w-5 h-5 text-red-500" />
+            </div>
+            <div>
+              <h1 className="text-xl sm:text-2xl font-black text-[#0F172A] tracking-tight">
+                NGO Dispatch & Moderation Queue
+              </h1>
+              <p className="text-xs text-[#64748B] font-medium mt-0.5">
+                Real-time emergency triage sorted by Priority (High Urgency first) then Recency.
+              </p>
+            </div>
           </div>
-          <p className="text-xs text-slate-400 mt-1">
-            Emergency Triage Queue — sorted by Priority (High Urgency first) then Recency.
-          </p>
         </div>
 
-        <div className="flex items-center space-x-2">
+        <div className="flex items-center space-x-2.5">
           <button
             onClick={fetchRequests}
-            className="p-2 rounded-xl bg-slate-900 border border-slate-800 text-slate-300 hover:text-white transition flex items-center space-x-1.5 text-xs font-semibold"
+            className="px-3 py-2 rounded-xl bg-white hover:bg-[#F1F5F9] border border-[#CBD5E1] text-[#475569] hover:text-[#0F172A] transition flex items-center space-x-1.5 text-xs font-bold shadow-sm"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
-            <span>Refresh</span>
+            <span>Refresh Queue</span>
           </button>
 
           <button
             onClick={onOpenMap}
-            className="px-3.5 py-2 rounded-xl bg-red-600 hover:bg-red-500 text-white transition flex items-center space-x-1.5 text-xs font-bold shadow-lg shadow-red-600/20"
+            className="px-4 py-2 rounded-xl bg-[#0F172A] hover:bg-[#1E293B] text-white transition flex items-center space-x-2 text-xs font-extrabold shadow-sm"
           >
-            <MapPin className="w-3.5 h-3.5" />
-            <span>View Crisis GIS Map</span>
+            <MapPin className="w-4 h-4 text-red-400" />
+            <span>Open GIS Crisis Map</span>
           </button>
         </div>
       </div>
 
       {/* Filter Tabs */}
-      <div className="flex items-center space-x-2 overflow-x-auto pb-3 mb-6 border-b border-slate-800">
+      <div className="flex items-center space-x-2 overflow-x-auto pb-2 mb-5 border-b border-[#CBD5E1]">
         {[
           { id: '', label: 'All Requests' },
           { id: 'pending', label: 'Pending Review' },
-          { id: 'approved', label: 'Approved' },
+          { id: 'approved', label: 'Approved & Dispatched' },
           { id: 'flagged', label: 'Flagged / Investigate' },
-          { id: 'rejected', label: 'Rejected' },
+          { id: 'rejected', label: 'Rejected / Spam' },
         ].map((tab) => (
           <button
             key={tab.id}
             onClick={() => setStatusFilter(tab.id)}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition whitespace-nowrap ${
+            className={`px-3.5 py-2 rounded-xl text-xs font-bold transition whitespace-nowrap ${
               statusFilter === tab.id
-                ? 'bg-slate-800 text-white border border-slate-700'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+                ? 'bg-[#0F172A] text-white shadow-sm'
+                : 'text-[#64748B] hover:text-[#0F172A] bg-white border border-[#E2E8F0] hover:bg-[#F1F5F9]'
             }`}
           >
             {tab.label}
@@ -135,126 +137,141 @@ export default function AdminDashboard({ onOpenMap }) {
         ))}
       </div>
 
-      {/* Requests Triage Table / Cards */}
+      {/* Queue Data Cards */}
       {loading ? (
-        <div className="p-12 text-center text-slate-500 flex flex-col items-center justify-center">
-          <RefreshCw className="w-6 h-6 animate-spin mb-2 text-red-500" />
-          <p className="text-xs">Loading emergency triage queue...</p>
+        <div className="p-16 text-center text-[#64748B] bg-white rounded-2xl border border-[#E2E8F0] flex flex-col items-center justify-center">
+          <RefreshCw className="w-8 h-8 animate-spin mb-3 text-[#2563EB]" />
+          <p className="text-sm font-bold text-[#0F172A]">Refreshing emergency triage stream...</p>
         </div>
       ) : requests.length === 0 ? (
-        <div className="glass-panel p-12 rounded-2xl text-center text-slate-500">
-          <CheckCircle2 className="w-10 h-10 mx-auto mb-2 text-slate-600" />
-          <h3 className="text-sm font-bold text-slate-300">Queue is Clear</h3>
-          <p className="text-xs text-slate-500 mt-1">No requests currently match the selected status filter.</p>
+        <div className="bg-white p-16 rounded-2xl border border-[#E2E8F0] text-center shadow-sm">
+          <CheckCircle2 className="w-12 h-12 mx-auto mb-3 text-[#16A34A]" />
+          <h3 className="text-base font-extrabold text-[#0F172A]">Queue Is Currently Clear</h3>
+          <p className="text-xs text-[#64748B] mt-1 font-medium">No emergency requests match the active filter criteria.</p>
         </div>
       ) : (
-        <div className="space-y-3">
+        <div className="space-y-3.5">
           {requests.map((req) => {
             const isHigh = req.urgency === 'high';
-            const isPending = req.admin_status === 'pending';
 
             return (
               <div
                 key={req.id}
-                className={`p-4 sm:p-5 rounded-2xl border transition-all ${
+                className={`p-5 rounded-2xl bg-white border transition-all shadow-sm ${
                   isHigh
-                    ? 'bg-gradient-to-r from-red-950/40 via-slate-900/90 to-slate-950 border-red-500/50 shadow-lg shadow-red-950/20'
-                    : 'glass-panel border-slate-800/80 hover:border-slate-700'
+                    ? 'border-[#FECACA] ring-1 ring-[#DC2626]/20 bg-gradient-to-r from-[#FEF2F2]/60 to-white'
+                    : 'border-[#E2E8F0] hover:border-[#CBD5E1]'
                 }`}
               >
                 <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-                  {/* Left: Category & details */}
+                  
+                  {/* Left Metadata & Needs */}
                   <div className="space-y-2 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="px-2.5 py-0.5 rounded-md text-xs font-extrabold uppercase tracking-wide bg-slate-800 text-red-400 border border-slate-700">
+                      <span className="px-2.5 py-1 rounded-lg text-xs font-black uppercase tracking-wider bg-[#0F172A] text-white">
                         {req.category}
                       </span>
 
-                      {isHigh ? (
-                        <span className="px-2 py-0.5 rounded text-[11px] font-extrabold bg-red-600 text-white uppercase tracking-wider flex items-center space-x-1 animate-pulse">
-                          <AlertTriangle className="w-3 h-3" />
+                      {/* Life-Threatening Priority Badge */}
+                      {isHigh && (
+                        <span className="px-2.5 py-1 rounded-lg text-[11px] font-black uppercase tracking-wider bg-[#FEE2E2] text-[#991B1B] border border-[#FECACA] flex items-center space-x-1.5 animate-pulse">
+                          <span className="w-2 h-2 rounded-full bg-[#DC2626]" />
                           <span>HIGH URGENCY</span>
-                        </span>
-                      ) : (
-                        <span className="px-2 py-0.5 rounded text-[11px] font-medium bg-slate-800 text-slate-400">
-                          Normal Urgency
                         </span>
                       )}
 
-                      <span className={`px-2 py-0.5 rounded text-[11px] font-semibold uppercase ${
+                      {/* Admin Triage Status Pill */}
+                      <span className={`px-2.5 py-1 rounded-lg text-[11px] font-extrabold uppercase ${
                         req.admin_status === 'approved'
-                          ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                          ? 'bg-[#DCFCE7] text-[#15803D] border border-[#BBF7D0]'
                           : req.admin_status === 'rejected'
-                          ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30'
+                          ? 'bg-[#FEE2E2] text-[#B91C1C] border border-[#FECACA]'
                           : req.admin_status === 'flagged'
-                          ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
-                          : 'bg-slate-800 text-slate-300'
+                          ? 'bg-[#FEF3C7] text-[#B45309] border border-[#FDE68A]'
+                          : 'bg-[#F1F5F9] text-[#475569] border border-[#CBD5E1]'
                       }`}>
                         Admin: {req.admin_status}
                       </span>
 
-                      <span className="text-[11px] font-mono text-slate-500">
-                        Status: <strong className="text-slate-300 capitalize">{req.status}</strong>
+                      {/* ML Corroboration Badge */}
+                      {req.ml_status && (
+                        <span className="px-2 py-0.5 rounded-lg text-[10px] font-bold uppercase tracking-wider bg-[#EDE9FE] text-[#6D28D9] border border-[#DDD6FE] flex items-center space-x-1">
+                          <Sparkles className="w-3 h-3" />
+                          <span>ML Corroborated</span>
+                        </span>
+                      )}
+
+                      {/* Org-Verified Badge */}
+                      <span className="px-2 py-0.5 rounded-lg text-[10px] font-bold uppercase tracking-wider bg-[#E0F2FE] text-[#0284C7] border border-[#BAE6FD] flex items-center space-x-1">
+                        <ShieldCheck className="w-3 h-3" />
+                        <span>Org-Verified</span>
                       </span>
 
-                      {/* Step 8: Duplicate Indicator */}
+                      {/* Step 8 Duplicate Indicator */}
                       <DuplicateBadge linkedCount={req.linked_count} />
                     </div>
 
-                    <p className="text-sm font-medium text-slate-200">
-                      {req.details || 'No detailed note provided by requester (1-Tap Immediate Dispatch)'}
+                    <p className="text-sm font-bold text-[#0F172A] leading-snug">
+                      {req.details || '1-Tap Emergency SOS (No additional text note attached)'}
                     </p>
 
-                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-400">
+                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-[#64748B] font-medium pt-0.5">
                       {req.requester_name && (
-                        <span><strong className="text-slate-300">Name:</strong> {req.requester_name}</span>
+                        <span><strong className="text-[#0F172A]">Requester:</strong> {req.requester_name}</span>
                       )}
                       {req.requester_phone && (
-                        <span><strong className="text-slate-300">Phone:</strong> {req.requester_phone}</span>
+                        <span><strong className="text-[#0F172A]">Phone:</strong> {req.requester_phone}</span>
                       )}
-                      <span className="flex items-center space-x-1 text-slate-400">
-                        <MapPin className="w-3 h-3 text-red-400" />
-                        <span>{req.lat?.toFixed(4)}, {req.lng?.toFixed(4)}</span>
+                      <span className="flex items-center space-x-1">
+                        <MapPin className="w-3.5 h-3.5 text-[#DC2626]" />
+                        <span className="font-mono">{req.lat?.toFixed(4)}, {req.lng?.toFixed(4)}</span>
                       </span>
-                      <span className="flex items-center space-x-1 text-slate-500">
-                        <Clock className="w-3 h-3" />
-                        <span>{req.created_at ? new Date(req.created_at).toLocaleTimeString() : 'Just now'}</span>
+                      <span className="flex items-center space-x-1">
+                        <Clock className="w-3.5 h-3.5 text-[#64748B]" />
+                        <span>{req.created_at ? new Date(req.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Just now'}</span>
+                      </span>
+                      <span className="font-mono text-[#94A3B8]">
+                        ID: {req.id?.substring(0, 8)}...
                       </span>
                     </div>
                   </div>
 
-                  {/* Right: Triage Action Buttons */}
-                  <div className="flex items-center space-x-2 pt-2 lg:pt-0 border-t lg:border-t-0 border-slate-800">
+                  {/* Right: Moderation Triage Actions */}
+                  <div className="flex items-center space-x-2 pt-3 lg:pt-0 border-t lg:border-t-0 border-[#E2E8F0]">
+                    {/* Approve Action */}
                     <button
                       disabled={actionInProgress === req.id || req.admin_status === 'approved'}
                       onClick={() => handleTriage(req.id, 'approved')}
-                      title="Approve request for volunteer dispatch"
-                      className="px-3 py-1.5 rounded-xl bg-emerald-600/90 hover:bg-emerald-500 text-white text-xs font-bold transition flex items-center space-x-1 disabled:opacity-40 shadow-sm"
+                      title="Approve and push to volunteer matching queue"
+                      className="px-3.5 py-2 rounded-xl bg-[#16A34A] hover:bg-[#15803D] text-white text-xs font-bold transition flex items-center space-x-1.5 disabled:opacity-30 shadow-sm"
                     >
-                      <Check className="w-3.5 h-3.5" />
+                      <Check className="w-4 h-4" />
                       <span>Approve</span>
                     </button>
 
+                    {/* Flag for Review */}
                     <button
                       disabled={actionInProgress === req.id || req.admin_status === 'flagged'}
                       onClick={() => handleTriage(req.id, 'flagged')}
-                      title="Flag for suspicious activity or verification"
-                      className="px-3 py-1.5 rounded-xl bg-amber-600/80 hover:bg-amber-500 text-white text-xs font-bold transition flex items-center space-x-1 disabled:opacity-40 shadow-sm"
+                      title="Flag for location verification or investigation"
+                      className="px-3 py-2 rounded-xl bg-[#D97706] hover:bg-[#B45309] text-white text-xs font-bold transition flex items-center space-x-1.5 disabled:opacity-30 shadow-sm"
                     >
                       <Flag className="w-3.5 h-3.5" />
                       <span>Flag</span>
                     </button>
 
+                    {/* Reject / Spam */}
                     <button
                       disabled={actionInProgress === req.id || req.admin_status === 'rejected'}
                       onClick={() => handleTriage(req.id, 'rejected')}
-                      title="Reject request"
-                      className="px-3 py-1.5 rounded-xl bg-rose-700/80 hover:bg-rose-600 text-white text-xs font-bold transition flex items-center space-x-1 disabled:opacity-40 shadow-sm"
+                      title="Reject fake or duplicate report"
+                      className="px-3 py-2 rounded-xl bg-[#DC2626] hover:bg-[#B91C1C] text-white text-xs font-bold transition flex items-center space-x-1.5 disabled:opacity-30 shadow-sm"
                     >
-                      <X className="w-3.5 h-3.5" />
+                      <X className="w-4 h-4" />
                       <span>Reject</span>
                     </button>
                   </div>
+
                 </div>
               </div>
             );

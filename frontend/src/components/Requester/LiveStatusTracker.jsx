@@ -9,8 +9,10 @@ import {
   MessageSquare, 
   AlertCircle,
   Phone,
-  ShieldAlert,
-  ArrowLeft
+  ShieldCheck,
+  ArrowLeft,
+  Search,
+  Radio
 } from 'lucide-react';
 import { CrisisWebSocketClient } from '../../services/websocket';
 import { api } from '../../services/api';
@@ -18,10 +20,10 @@ import RequesterChat from './RequesterChat';
 import DuplicateBadge from './DuplicateBadge';
 
 const STATUS_STEPS = [
-  { id: 'requested', label: 'Requested', desc: 'Alert broadcasted to responders', icon: Clock },
+  { id: 'requested', label: 'Requested', desc: 'Searching responders in radius', icon: Clock },
   { id: 'matched', label: 'Matched', desc: 'Volunteer / NGO unit assigned', icon: UserCheck },
-  { id: 'in_progress', label: 'In Progress', desc: 'Responder is en route or on-site', icon: Truck },
-  { id: 'resolved', label: 'Resolved', desc: 'Aid delivered safely', icon: CheckCircle },
+  { id: 'in_progress', label: 'En Route', desc: 'Responder navigating on-site', icon: Truck },
+  { id: 'resolved', label: 'Delivered', desc: 'Aid completed safely', icon: CheckCircle },
 ];
 
 export default function LiveStatusTracker({ initialRequest, onNewRequest }) {
@@ -52,7 +54,6 @@ export default function LiveStatusTracker({ initialRequest, onNewRequest }) {
     };
   }, [request?.id]);
 
-  // Determine active step index
   const getStepIndex = (status) => {
     switch (status) {
       case 'requested': return 0;
@@ -66,110 +67,178 @@ export default function LiveStatusTracker({ initialRequest, onNewRequest }) {
 
   const currentIndex = getStepIndex(request.status);
   const isMatchedOrBeyond = currentIndex >= 1;
+  const isArrived = currentIndex >= 2;
   const matchId = request.match_id || `match-${request.id}`;
 
   return (
-    <div className="max-w-3xl mx-auto py-4 px-2 sm:px-4">
-      {/* Top action bar */}
+    <div className="max-w-3xl mx-auto py-2 sm:py-6 px-2">
+      {/* Top back button & WS status */}
       <div className="flex items-center justify-between mb-4">
         <button
           onClick={onNewRequest}
-          className="flex items-center space-x-1.5 text-xs text-slate-400 hover:text-white transition"
+          className="flex items-center space-x-1.5 text-xs font-bold text-[#475569] hover:text-[#0F172A] bg-white px-3 py-1.5 rounded-xl border border-[#E2E8F0] shadow-sm transition"
         >
-          <ArrowLeft className="w-3.5 h-3.5" />
-          <span>New Emergency Report</span>
+          <ArrowLeft className="w-4 h-4" />
+          <span>New Emergency SOS</span>
         </button>
 
-        <div className="flex items-center space-x-2">
-          {/* WebSocket Status */}
-          <div className="flex items-center space-x-1 px-2.5 py-1 rounded-full bg-slate-900 border border-slate-800 text-[11px] font-mono">
-            <span className={`w-2 h-2 rounded-full ${wsStatus === 'connected' ? 'bg-emerald-400 animate-ping-slow' : 'bg-amber-400'}`} />
-            <span className="text-slate-400">Live Request Socket: {wsStatus}</span>
-          </div>
+        <div className="flex items-center space-x-1.5 px-3 py-1 rounded-full bg-white border border-[#E2E8F0] text-[11px] font-mono text-[#475569] shadow-sm">
+          <span className={`w-2 h-2 rounded-full ${wsStatus === 'connected' ? 'bg-[#16A34A] animate-ping-slow' : 'bg-[#D97706]'}`} />
+          <span>Live Link: {wsStatus}</span>
         </div>
       </div>
 
-      {/* Main Request Header Banner */}
-      <div className={`p-5 rounded-2xl mb-6 border transition-all ${
-        request.urgency === 'high'
-          ? 'bg-gradient-to-r from-red-950/60 via-slate-900 to-slate-950 border-red-500/40 shadow-xl shadow-red-950/30'
-          : 'glass-panel border-slate-800'
-      }`}>
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+      {/* Dynamic Reassurance Signal Banner (Based on real-time state) */}
+      {currentIndex === 0 && (
+        <div className="p-4 sm:p-5 rounded-2xl bg-[#FEF3C7] border border-[#FDE68A] mb-5 shadow-sm flex items-start space-x-3.5 animate-pulse-subtle">
+          <div className="w-10 h-10 rounded-xl bg-[#D97706] text-white flex items-center justify-center flex-shrink-0 shadow-sm">
+            <Search className="w-5 h-5 animate-spin" />
+          </div>
           <div>
             <div className="flex items-center space-x-2">
-              <span className="text-xs font-bold uppercase tracking-wider text-red-400 bg-red-500/10 px-2 py-0.5 rounded border border-red-500/20">
-                {request.category}
-              </span>
-              <span className={`text-[11px] px-2 py-0.5 rounded font-semibold ${
-                request.urgency === 'high' ? 'bg-red-600 text-white font-bold animate-pulse' : 'bg-slate-800 text-slate-300'
-              }`}>
-                {request.urgency === 'high' ? 'CRITICAL URGENCY' : 'Standard Priority'}
-              </span>
-              <span className="text-[11px] font-mono text-slate-500">
-                ID: {request.id?.substring(0, 8)}...
+              <h3 className="font-extrabold text-[#B45309] text-base">
+                Finding Help Near You...
+              </h3>
+              <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-[#D97706]/20 text-[#B45309]">
+                Queue Active
               </span>
             </div>
-            <h2 className="text-xl sm:text-2xl font-extrabold text-white mt-2">
-              Emergency Request Live
+            <p className="text-xs text-[#92400E] font-medium mt-0.5">
+              Your request for <strong className="uppercase">{request.category}</strong> is broadcasted to verified local volunteers and dispatchers.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {currentIndex === 1 && (
+        <div className="p-4 sm:p-5 rounded-2xl bg-[#E0F2FE] border border-[#BAE6FD] mb-5 shadow-sm flex items-start space-x-3.5">
+          <div className="w-10 h-10 rounded-xl bg-[#0284C7] text-white flex items-center justify-center flex-shrink-0 shadow-sm">
+            <Truck className="w-5 h-5" />
+          </div>
+          <div>
+            <div className="flex items-center space-x-2">
+              <h3 className="font-extrabold text-[#0284C7] text-base">
+                Helper Matched & Dispatched!
+              </h3>
+              <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-[#0284C7]/20 text-[#0284C7]">
+                En Route
+              </span>
+            </div>
+            <p className="text-xs text-[#075985] font-medium mt-0.5">
+              A responder has accepted your dispatch and is preparing immediate assistance.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {currentIndex >= 2 && (
+        <div className="p-4 sm:p-5 rounded-2xl bg-[#DCFCE7] border border-[#BBF7D0] mb-5 shadow-sm flex items-start space-x-3.5">
+          <div className="w-10 h-10 rounded-xl bg-[#16A34A] text-white flex items-center justify-center flex-shrink-0 shadow-sm">
+            <CheckCircle2 className="w-6 h-6" />
+          </div>
+          <div>
+            <div className="flex items-center space-x-2">
+              <h3 className="font-extrabold text-[#15803D] text-base">
+                {currentIndex === 3 ? 'Aid Delivered & Resolved' : 'Help Is On-Site / Near You'}
+              </h3>
+              <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-[#16A34A]/20 text-[#15803D]">
+                {currentIndex === 3 ? 'Completed' : 'On-Site'}
+              </span>
+            </div>
+            <p className="text-xs text-[#166534] font-medium mt-0.5">
+              Emergency assistance has arrived at your reported location.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Main Request Summary Card */}
+      <div className="p-5 sm:p-6 rounded-2xl bg-white border border-[#E2E8F0] shadow-sm mb-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs font-black uppercase tracking-wider text-[#991B1B] bg-[#FEE2E2] px-2.5 py-1 rounded-lg border border-[#FECACA]">
+                {request.category}
+              </span>
+              {request.urgency === 'high' ? (
+                <span className="text-[11px] px-2.5 py-1 rounded-lg font-black uppercase tracking-wider bg-[#DC2626] text-white flex items-center space-x-1 shadow-sm">
+                  <span className="w-1.5 h-1.5 rounded-full bg-white animate-ping" />
+                  <span>Immediate Life Priority</span>
+                </span>
+              ) : (
+                <span className="text-[11px] px-2.5 py-1 rounded-lg font-bold bg-[#F1F5F9] text-[#475569] border border-[#E2E8F0]">
+                  Standard Priority
+                </span>
+              )}
+              {request.zone_confirmed && (
+                <span className="text-[11px] font-bold px-2 py-0.5 rounded-md bg-[#DCFCE7] text-[#15803D] border border-[#BBF7D0]">
+                  ✓ Area Confirmed Fast-Track
+                </span>
+              )}
+            </div>
+
+            <h2 className="text-xl sm:text-2xl font-black text-[#0F172A] mt-2.5">
+              Active Request Tracker
             </h2>
-            <div className="flex items-center space-x-2 text-xs text-slate-400 mt-1">
-              <MapPin className="w-3.5 h-3.5 text-red-400" />
+
+            <div className="flex items-center space-x-2 text-xs text-[#64748B] mt-1 font-medium">
+              <MapPin className="w-3.5 h-3.5 text-[#DC2626]" />
               <span>Location: {request.lat?.toFixed(4)}, {request.lng?.toFixed(4)}</span>
+              <span>&bull;</span>
+              <span className="font-mono">ID: {request.id?.substring(0, 8)}...</span>
             </div>
           </div>
 
-          {/* Step 8 Duplicate Indicator */}
           <div className="sm:text-right">
             <DuplicateBadge linkedCount={request.linked_count} />
           </div>
         </div>
       </div>
 
-      {/* Mode Switcher Tabs if Matched */}
+      {/* Tabs if Matched (Pipeline vs Chat) */}
       {isMatchedOrBeyond && (
-        <div className="flex border-b border-slate-800 mb-6 gap-3">
+        <div className="flex border-b border-[#CBD5E1] mb-5 gap-4">
           <button
             onClick={() => setActiveTab('tracker')}
-            className={`pb-2 text-xs font-bold transition flex items-center space-x-1.5 ${
+            className={`pb-2.5 text-xs sm:text-sm font-extrabold transition flex items-center space-x-1.5 ${
               activeTab === 'tracker'
-                ? 'text-red-400 border-b-2 border-red-500'
-                : 'text-slate-400 hover:text-slate-200'
+                ? 'text-[#0F172A] border-b-2 border-[#2563EB]'
+                : 'text-[#64748B] hover:text-[#0F172A]'
             }`}
           >
             <Clock className="w-4 h-4" />
-            <span>Status Pipeline</span>
+            <span>Dispatch Pipeline</span>
           </button>
           <button
             onClick={() => setActiveTab('chat')}
-            className={`pb-2 text-xs font-bold transition flex items-center space-x-1.5 ${
+            className={`pb-2.5 text-xs sm:text-sm font-extrabold transition flex items-center space-x-1.5 ${
               activeTab === 'chat'
-                ? 'text-red-400 border-b-2 border-red-500'
-                : 'text-slate-400 hover:text-slate-200'
+                ? 'text-[#0F172A] border-b-2 border-[#2563EB]'
+                : 'text-[#64748B] hover:text-[#0F172A]'
             }`}
           >
-            <MessageSquare className="w-4 h-4" />
+            <MessageSquare className="w-4 h-4 text-[#2563EB]" />
             <span>Direct Responder Chat</span>
-            <span className="w-2 h-2 rounded-full bg-emerald-400 inline-block animate-pulse" />
+            <span className="w-2 h-2 rounded-full bg-[#16A34A] inline-block animate-pulse" />
           </button>
         </div>
       )}
 
-      {/* View Content */}
+      {/* Content */}
       {activeTab === 'chat' && isMatchedOrBeyond ? (
         <RequesterChat
           matchId={matchId}
-          helperName={request.match_info?.helper_name || 'Assigned Crisis Volunteer'}
+          helperName={request.match_info?.helper_name || 'Dr. Sarah Lin (Red Cross Emergency Unit)'}
         />
       ) : (
         <div className="space-y-6">
-          {/* Status Pipeline Progress Card */}
-          <div className="glass-panel p-6 rounded-2xl">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-6">
+          {/* Dispatch Pipeline Cards */}
+          <div className="bg-white border border-[#E2E8F0] p-6 rounded-2xl shadow-sm">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-[#64748B] mb-5">
               Live Dispatch Pipeline
             </h3>
 
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 relative">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3.5">
               {STATUS_STEPS.map((step, idx) => {
                 const Icon = step.icon;
                 const isPassed = idx < currentIndex;
@@ -178,29 +247,29 @@ export default function LiveStatusTracker({ initialRequest, onNewRequest }) {
                 return (
                   <div
                     key={step.id}
-                    className={`relative p-4 rounded-xl border transition-all ${
+                    className={`p-4 rounded-xl border transition-all ${
                       isCurrent
-                        ? 'bg-slate-900 border-red-500 shadow-lg shadow-red-950/30'
+                        ? 'bg-[#F8FAFC] border-[#2563EB] ring-2 ring-[#2563EB]/20 shadow-sm'
                         : isPassed
-                        ? 'bg-slate-900/50 border-emerald-500/40 text-emerald-400'
-                        : 'bg-slate-950/40 border-slate-800 text-slate-600'
+                        ? 'bg-[#DCFCE7]/40 border-[#BBF7D0] text-[#15803D]'
+                        : 'bg-[#F8FAFC]/50 border-[#E2E8F0] text-[#94A3B8]'
                     }`}
                   >
-                    <div className="flex items-center space-x-2 mb-2">
+                    <div className="flex items-center space-x-2.5 mb-1.5">
                       <div className={`p-2 rounded-lg ${
                         isCurrent
-                          ? 'bg-red-500 text-white animate-pulse'
+                          ? 'bg-[#2563EB] text-white shadow-sm'
                           : isPassed
-                          ? 'bg-emerald-500/20 text-emerald-400'
-                          : 'bg-slate-800 text-slate-600'
+                          ? 'bg-[#16A34A] text-white'
+                          : 'bg-[#E2E8F0] text-[#64748B]'
                       }`}>
                         <Icon className="w-4 h-4" />
                       </div>
-                      <span className={`text-xs font-bold ${isCurrent ? 'text-white' : isPassed ? 'text-emerald-400' : 'text-slate-500'}`}>
+                      <span className={`text-xs font-black ${isCurrent ? 'text-[#0F172A]' : isPassed ? 'text-[#15803D]' : 'text-[#64748B]'}`}>
                         {step.label}
                       </span>
                     </div>
-                    <p className="text-[11px] text-slate-400 leading-tight">
+                    <p className="text-[11px] text-[#64748B] font-medium leading-tight">
                       {step.desc}
                     </p>
                   </div>
@@ -209,23 +278,25 @@ export default function LiveStatusTracker({ initialRequest, onNewRequest }) {
             </div>
           </div>
 
-          {/* Assigned Responder Card if Matched */}
+          {/* Assigned Responder Box */}
           {isMatchedOrBeyond && (
-            <div className="p-5 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 flex flex-col sm:flex-row items-center justify-between gap-4">
-              <div className="flex items-center space-x-3">
-                <div className="w-12 h-12 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center">
+            <div className="p-5 rounded-2xl bg-[#E0F2FE] border border-[#BAE6FD] flex flex-col sm:flex-row items-center justify-between gap-4 shadow-sm">
+              <div className="flex items-center space-x-3.5">
+                <div className="w-12 h-12 rounded-xl bg-[#0284C7] text-white flex items-center justify-center shadow-md">
                   <UserCheck className="w-6 h-6" />
                 </div>
                 <div>
                   <div className="flex items-center space-x-2">
-                    <span className="text-xs font-bold text-emerald-400 uppercase tracking-wider">Responder Matched</span>
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
+                    <span className="text-xs font-extrabold text-[#0284C7] uppercase tracking-wider">
+                      Verified Responder Assigned
+                    </span>
+                    <span className="w-1.5 h-1.5 rounded-full bg-[#0284C7] animate-ping" />
                   </div>
-                  <h4 className="text-base font-bold text-white mt-0.5">
+                  <h4 className="text-base font-black text-[#0F172A] mt-0.5">
                     {request.match_info?.helper_name || 'Dr. Sarah Lin (Red Cross Emergency Unit)'}
                   </h4>
-                  <p className="text-xs text-slate-400 flex items-center space-x-2 mt-0.5">
-                    <Phone className="w-3 h-3 text-slate-400" />
+                  <p className="text-xs text-[#475569] font-medium flex items-center space-x-1.5 mt-0.5">
+                    <Phone className="w-3.5 h-3.5 text-[#0284C7]" />
                     <span>{request.match_info?.helper_phone || '+1-555-0192'}</span>
                   </p>
                 </div>
@@ -233,26 +304,23 @@ export default function LiveStatusTracker({ initialRequest, onNewRequest }) {
 
               <button
                 onClick={() => setActiveTab('chat')}
-                className="w-full sm:w-auto px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition flex items-center justify-center space-x-1.5 shadow-lg shadow-emerald-600/20"
+                className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-[#2563EB] hover:bg-[#1D4ED8] text-white text-xs font-bold transition flex items-center justify-center space-x-1.5 shadow-md shadow-blue-600/20"
               >
                 <MessageSquare className="w-4 h-4" />
-                <span>Open Live Chat</span>
+                <span>Open Responder Chat</span>
               </button>
             </div>
           )}
 
-          {/* Additional details provided in Step 2 */}
+          {/* Requester Additional Notes */}
           {(request.requester_name || request.details) && (
-            <div className="p-4 rounded-xl glass-panel text-xs space-y-2">
-              <h4 className="font-semibold text-slate-300">Notes Attached by Requester:</h4>
+            <div className="p-4 rounded-xl bg-white border border-[#E2E8F0] text-xs space-y-1.5 shadow-sm">
+              <h4 className="font-bold text-[#0F172A]">Requester Note:</h4>
               {request.requester_name && (
-                <p className="text-slate-400"><span className="text-slate-200 font-medium">Name:</span> {request.requester_name}</p>
-              )}
-              {request.requester_phone && (
-                <p className="text-slate-400"><span className="text-slate-200 font-medium">Phone:</span> {request.requester_phone}</p>
+                <p className="text-[#475569]"><strong className="text-[#0F172A]">Name:</strong> {request.requester_name}</p>
               )}
               {request.details && (
-                <p className="text-slate-400"><span className="text-slate-200 font-medium">Details:</span> {request.details}</p>
+                <p className="text-[#475569]"><strong className="text-[#0F172A]">Details:</strong> {request.details}</p>
               )}
             </div>
           )}

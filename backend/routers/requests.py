@@ -45,7 +45,7 @@ async def create_request(payload: RequestCreate):
     """
     Step 1 & 2: Create a crisis request.
     Auto-promotes oxygen and rescue to high urgency.
-    Broadcasts 'new_request' event over WebSocket.
+    Broadcasts 'new_request' event over WebSocket across all channels.
     """
     data_dict = payload.model_dump()
     created = await db_create_request(data_dict)
@@ -54,9 +54,11 @@ async def create_request(payload: RequestCreate):
     linked_count = await db_get_linked_count(created["id"])
     created["linked_count"] = linked_count
 
-    # Broadcast to admin and request channel
+    # Broadcast to admin, volunteers, and request channel
     await ws_manager.broadcast("admin", "new_request", created)
+    await ws_manager.broadcast("volunteers", "new_request", created)
     await ws_manager.broadcast(f"request:{created['id']}", "new_request", created)
+    await ws_manager.broadcast_all("new_request", created)
 
     return created
 
@@ -68,7 +70,6 @@ async def list_requests(admin_status: Optional[str] = Query(None)):
     Enriches with linked duplicate count for Step 8.
     """
     items = await db_list_requests(admin_status=admin_status)
-    # Enrich with linked count
     for req in items:
         req["linked_count"] = await db_get_linked_count(req["id"])
     return items
@@ -104,16 +105,18 @@ async def update_request(request_id: str, payload: RequestUpdate):
     # Broadcast updates
     await ws_manager.broadcast(f"request:{request_id}", "status_update", updated)
     await ws_manager.broadcast("admin", "status_update", updated)
+    await ws_manager.broadcast("volunteers", "status_update", updated)
+    await ws_manager.broadcast_all("status_update", updated)
 
     return updated
 
 
-# Simulation endpoint for Dev A full lifecycle testing (Hour 7 helper)
+# Simulation endpoint for Dev A full lifecycle testing & volunteer accept from map
 @router.post("/{request_id}/accept")
 async def simulate_accept_request(request_id: str):
     """
     Accepts a request, simulates volunteer assignment, creates a match,
-    and broadcasts 'matched' to request and admin channels.
+    and broadcasts 'matched' to request, admin, and volunteer channels.
     """
     req = await db_get_request(request_id)
     if not req:
@@ -128,6 +131,8 @@ async def simulate_accept_request(request_id: str):
         "status": "en_route",
         "helper_name": "Volunteer Unit Alpha (Red Cross)",
         "helper_phone": "+1 (555) 0192",
+        "helper_lat": req["lat"] + 0.003,
+        "helper_lng": req["lng"] + 0.003,
     }
     mem_db.matches[match_id] = match_data
 
@@ -138,8 +143,10 @@ async def simulate_accept_request(request_id: str):
     })
     updated["match_info"] = match_data
 
-    # Broadcast 'matched' event
+    # Broadcast 'matched' event across all channels
     await ws_manager.broadcast(f"request:{request_id}", "matched", updated)
     await ws_manager.broadcast("admin", "matched", updated)
+    await ws_manager.broadcast("volunteers", "matched", updated)
+    await ws_manager.broadcast_all("matched", updated)
 
     return {"status": "matched", "match": match_data, "request": updated}

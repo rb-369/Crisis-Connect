@@ -15,12 +15,19 @@ import {
   MapPin,
   Building2,
   Clock,
-  Users
+  Users,
+  FileCheck,
+  Loader2,
+  ShieldCheck,
+  Stethoscope,
+  RotateCw,
+  Info
 } from 'lucide-react';
 import VoiceNoteRecorder from './VoiceNoteRecorder';
 import { BLOOD_GROUPS, getBloodGroupTheme } from '../../utils/bloodCompatibility';
 import { getDeviceId } from '../../utils/device';
 import { api } from '../../services/api';
+import { performPrescriptionOCR, generateDemoPrescriptionImage } from '../../services/ocrService';
 
 const OXYGEN_TYPES = [
   '10L Jumbo Medical Cylinder',
@@ -65,6 +72,12 @@ export default function NonCriticalRequestModal({ category, coords, onClose, onR
   const [dosage, setDosage] = useState('');
   const [prescriptionImage, setPrescriptionImage] = useState(null);
 
+  // OCR Verification States
+  const [isScanningOcr, setIsScanningOcr] = useState(false);
+  const [ocrProgress, setOcrProgress] = useState({ status: '', progress: 0, message: '' });
+  const [ocrData, setOcrData] = useState(null);
+  const [ocrError, setOcrError] = useState(null);
+
   const [personsCount, setPersonsCount] = useState(4);
   const [foodItemTypes, setFoodItemTypes] = useState(['20L Drinking Water Cans', 'Ready-to-Eat Meal Packets']);
   const [waterLiters, setWaterLiters] = useState(50);
@@ -90,7 +103,7 @@ export default function NonCriticalRequestModal({ category, coords, onClose, onR
       case 'blood':
         return {
           title: 'Blood Aid / Plasma Request',
-          subtitle: 'Mandatory blood type required for matching compatible donors in your radius.',
+          subtitle: 'Zero login required. Hospital location & blood type needed for direct donor dispatch.',
           icon: HeartHandshake,
           iconColor: '#DC2626',
           headerBg: 'bg-red-50 border-red-100',
@@ -98,7 +111,7 @@ export default function NonCriticalRequestModal({ category, coords, onClose, onR
       case 'oxygen':
         return {
           title: 'Medical Oxygen Cylinder Request',
-          subtitle: 'Specify cylinder or concentrator requirements for fast dispatch.',
+          subtitle: 'Attach prescription / hospital order slip for instant OCR verification.',
           icon: Wind,
           iconColor: '#0891B2',
           headerBg: 'bg-cyan-50 border-cyan-100',
@@ -106,7 +119,7 @@ export default function NonCriticalRequestModal({ category, coords, onClose, onR
       case 'medicine':
         return {
           title: 'Prescription Medicine & First Aid',
-          subtitle: 'List critical medications (insulin, inhalers, cardiac meds) or attach Rx.',
+          subtitle: 'Upload doctor Rx for free in-browser OCR auto-fill & verified trust badge.',
           icon: Pill,
           iconColor: '#2563EB',
           headerBg: 'bg-blue-50 border-blue-100',
@@ -149,15 +162,76 @@ export default function NonCriticalRequestModal({ category, coords, onClose, onR
   const meta = getCategoryMeta();
   const Icon = meta.icon;
 
+  // Process Prescription with Tesseract OCR
+  const processPrescriptionWithOcr = async (imgDataUrl) => {
+    setIsScanningOcr(true);
+    setOcrError(null);
+    setOcrProgress({ status: 'starting', progress: 5, message: 'Loading Tesseract.js engine...' });
+
+    try {
+      const result = await performPrescriptionOCR(
+        imgDataUrl,
+        (progressInfo) => setOcrProgress(progressInfo),
+        category
+      );
+
+      if (result.success) {
+        setOcrData(result);
+
+        // Auto-fill Medicine Form Fields
+        if (category === 'medicine') {
+          if (result.medicineString) {
+            setMedicineNames((prev) => prev ? `${prev}, ${result.medicineString}` : result.medicineString);
+          }
+          if (result.dosage && !dosage) {
+            setDosage(result.dosage);
+          }
+          if (result.patientName && !patientName) {
+            setPatientName(result.patientName);
+          }
+        }
+
+        // Auto-fill Oxygen Form Fields
+        if (category === 'oxygen') {
+          if (result.oxygenSpecs?.cylinderType) {
+            setOxygenType(result.oxygenSpecs.cylinderType);
+          }
+          if (result.oxygenSpecs?.lpm) {
+            setFlowRate(result.oxygenSpecs.lpm);
+          }
+          if (result.patientName && !patientName) {
+            setPatientName(result.patientName);
+          }
+        }
+      } else {
+        setOcrError('OCR analysis completed without clear medical matches. You can still submit for manual NGO review.');
+      }
+    } catch (err) {
+      console.error('OCR processing error:', err);
+      setOcrError('Could not process image automatically. You can still submit this request for manual verification.');
+    } finally {
+      setIsScanningOcr(false);
+    }
+  };
+
   const handleImageUpload = (e) => {
     const file = e.target.files[0];
     if (file) {
       const reader = new FileReader();
       reader.onloadend = () => {
-        setPrescriptionImage(reader.result);
+        const dataUrl = reader.result;
+        setPrescriptionImage(dataUrl);
+        // Automatically trigger OCR scanning on upload
+        processPrescriptionWithOcr(dataUrl);
       };
       reader.readAsDataURL(file);
     }
+  };
+
+  const handleLoadDemoPrescription = (type) => {
+    const demoImg = generateDemoPrescriptionImage(type);
+    setPrescriptionImage(demoImg);
+    processPrescriptionWithOcr(demoImg);
   };
 
   const toggleFoodItem = (item) => {
@@ -172,10 +246,16 @@ export default function NonCriticalRequestModal({ category, coords, onClose, onR
     e.preventDefault();
     setValidationError(null);
 
-    // Validation: For Blood, bloodGroup is strictly mandatory
-    if (category === 'blood' && !bloodGroup) {
-      setValidationError('Please select the required Blood Group (Mandatory for compatible donor matching).');
-      return;
+    // Validation: For Blood, bloodGroup and hospitalName are strictly mandatory
+    if (category === 'blood') {
+      if (!bloodGroup) {
+        setValidationError('Please select the required Blood Group (Mandatory for compatible donor matching).');
+        return;
+      }
+      if (!hospitalName.trim()) {
+        setValidationError('Please specify the Hospital or Blood Bank name (Mandatory for dispatching donors).');
+        return;
+      }
     }
 
     setIsSubmitting(true);
@@ -185,34 +265,55 @@ export default function NonCriticalRequestModal({ category, coords, onClose, onR
     let service_details = {};
     let autoDetails = generalDetails || '';
 
+    // OCR Metadata object attached to request
+    const ocrMetadata = ocrData ? {
+      is_verified: ocrData.isValid,
+      badge: ocrData.badge,
+      badge_label: ocrData.badgeLabel,
+      confidence: ocrData.confidence,
+      doctor_info: ocrData.doctorInfo,
+      detected_medicines: ocrData.medicines,
+      detected_oxygen: ocrData.oxygenSpecs,
+      prescription_date: ocrData.date,
+    } : {
+      is_verified: false,
+      badge: prescriptionImage ? 'unverified_image_attached' : 'no_rx_uploaded',
+      badge_label: prescriptionImage ? 'Prescription Attached (Pending NGO Check)' : 'Unverified Rx — Pending NGO Review',
+      confidence: 0,
+      doctor_info: null,
+    };
+
     if (category === 'blood') {
       service_details = {
         blood_group: bloodGroup,
         units: Number(bloodUnits),
-        hospital_name: hospitalName || 'Mumbai General Area',
+        hospital_name: hospitalName.trim(),
         patient_name: patientName,
         patient_condition: patientCondition,
+        verification_type: 'hospital_dispatch',
       };
       if (!autoDetails) {
-        autoDetails = `Urgent need for ${bloodUnits} unit(s) of ${bloodGroup} blood at ${hospitalName || 'local clinic'}.`;
+        autoDetails = `Urgent need for ${bloodUnits} unit(s) of ${bloodGroup} blood at ${hospitalName.trim()}.`;
       }
     } else if (category === 'oxygen') {
       service_details = {
         oxygen_type: oxygenType,
         flow_rate: flowRate,
         patient_name: patientName,
+        ocr_verification: ocrMetadata,
       };
       if (!autoDetails) {
-        autoDetails = `Need ${oxygenType} (${flowRate}) for patient ${patientName || 'in distress'}.`;
+        autoDetails = `Need ${oxygenType} (${flowRate}) for patient ${patientName || 'in distress'}.${ocrData?.doctorInfo ? ` [Prescribed by ${ocrData.doctorInfo.name}]` : ''}`;
       }
     } else if (category === 'medicine') {
       service_details = {
         medicine_names: medicineNames || 'Critical Prescription Medications',
         dosage: dosage,
         has_prescription_image: Boolean(prescriptionImage),
+        ocr_verification: ocrMetadata,
       };
       if (!autoDetails) {
-        autoDetails = `Medicines required: ${medicineNames || 'Essential supplies'} (${dosage || 'standard dosage'}).`;
+        autoDetails = `Medicines required: ${medicineNames || 'Essential supplies'} (${dosage || 'standard dosage'}).${ocrData?.doctorInfo ? ` [Prescribed by ${ocrData.doctorInfo.name}]` : ''}`;
       }
     } else if (category === 'food') {
       service_details = {
@@ -441,18 +542,91 @@ export default function NonCriticalRequestModal({ category, coords, onClose, onR
                 </div>
               </div>
 
-              <div>
-                <label className="block text-xs font-bold text-[#0F172A] mb-1">
-                  Required Flow Rate
-                </label>
-                <input
-                  type="text"
-                  placeholder="e.g. 5 LPM, 10 LPM, High Flow"
-                  value={flowRate}
-                  onChange={(e) => setFlowRate(e.target.value)}
-                  className="w-full bg-[#F8FAFC] border border-[#CBD5E1] rounded-xl px-3 py-2 text-xs font-semibold text-[#0F172A] focus:border-[#0891B2] focus:outline-none"
-                />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-[#0F172A] mb-1">
+                    Required Flow Rate
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. 5 LPM, 10 LPM, High Flow"
+                    value={flowRate}
+                    onChange={(e) => setFlowRate(e.target.value)}
+                    className="w-full bg-[#F8FAFC] border border-[#CBD5E1] rounded-xl px-3 py-2 text-xs font-semibold text-[#0F172A] focus:border-[#0891B2] focus:outline-none"
+                  />
+                </div>
+
+                <div>
+                  <div className="flex justify-between items-center mb-1">
+                    <label className="block text-xs font-bold text-[#0F172A]">
+                      Doctor Requisition / Rx Slip
+                    </label>
+                    <span className="text-[10px] text-[#0891B2] font-semibold">Tesseract OCR</span>
+                  </div>
+                  <label className="flex items-center justify-center space-x-2 py-2 px-3 border border-dashed border-[#CBD5E1] rounded-xl bg-[#F8FAFC] hover:bg-white text-xs text-[#475569] font-semibold cursor-pointer">
+                    <Upload className="w-3.5 h-3.5 text-[#0891B2]" />
+                    <span>{prescriptionImage ? 'O2 Prescription Attached' : 'Upload Doctor Prescription Slip'}</span>
+                    <input type="file" accept="image/*" onChange={handleImageUpload} className="hidden" />
+                  </label>
+                </div>
               </div>
+
+              {/* Demo Oxygen Test Button */}
+              <div className="flex items-center justify-between bg-cyan-50/60 p-2 rounded-xl border border-cyan-100">
+                <span className="text-[11px] text-cyan-900 font-medium flex items-center gap-1">
+                  <Sparkles className="w-3.5 h-3.5 text-cyan-600" />
+                  Need a sample oxygen prescription to test?
+                </span>
+                <button
+                  type="button"
+                  onClick={() => handleLoadDemoPrescription('oxygen')}
+                  disabled={isScanningOcr}
+                  className="text-[11px] px-2.5 py-1 bg-cyan-600 hover:bg-cyan-700 text-white font-bold rounded-lg transition shadow-xs flex items-center gap-1 cursor-pointer"
+                >
+                  {isScanningOcr ? <Loader2 className="w-3 h-3 animate-spin" /> : '⚡ Test with Demo O2 Rx'}
+                </button>
+              </div>
+
+              {/* OCR Scanning Progress Box */}
+              {isScanningOcr && (
+                <div className="p-3 bg-cyan-50 border border-cyan-200 rounded-xl space-y-1.5 animate-pulse">
+                  <div className="flex justify-between items-center">
+                    <div className="flex items-center space-x-2">
+                      <Loader2 className="w-4 h-4 text-cyan-700 animate-spin" />
+                      <span className="text-xs font-bold text-cyan-900">{ocrProgress.message || 'Scanning Rx with Tesseract OCR...'}</span>
+                    </div>
+                    <span className="text-xs font-black text-cyan-800">{ocrProgress.progress}%</span>
+                  </div>
+                  <div className="w-full bg-cyan-200 rounded-full h-1.5 overflow-hidden">
+                    <div className="bg-cyan-600 h-1.5 rounded-full transition-all duration-300" style={{ width: `${ocrProgress.progress}%` }}></div>
+                  </div>
+                </div>
+              )}
+
+              {/* OCR Result Card */}
+              {ocrData && !isScanningOcr && (
+                <div className={`p-3 rounded-xl border space-y-2 ${ocrData.isValid ? 'bg-emerald-50 border-emerald-200' : 'bg-amber-50 border-amber-200'}`}>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-1.5">
+                      <ShieldCheck className={`w-4 h-4 ${ocrData.isValid ? 'text-emerald-600' : 'text-amber-600'}`} />
+                      <span className={`text-xs font-bold ${ocrData.isValid ? 'text-emerald-900' : 'text-amber-900'}`}>{ocrData.badgeLabel}</span>
+                    </div>
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${ocrData.isValid ? 'bg-emerald-200 text-emerald-800' : 'bg-amber-200 text-amber-800'}`}>
+                      {ocrData.confidence}% Confidence
+                    </span>
+                  </div>
+                  {ocrData.doctorInfo && (
+                    <p className="text-[11px] text-emerald-800">
+                      🩺 <strong>{ocrData.doctorInfo.name}</strong> ({ocrData.doctorInfo.clinicOrHospital})
+                    </p>
+                  )}
+                  {ocrData.oxygenSpecs && (
+                    <div className="text-[11px] text-emerald-800 bg-emerald-100/60 p-1.5 rounded-lg">
+                      Auto-detected: <strong>{ocrData.oxygenSpecs.cylinderType}</strong> at <strong>{ocrData.oxygenSpecs.lpm}</strong>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
 
@@ -487,9 +661,12 @@ export default function NonCriticalRequestModal({ category, coords, onClose, onR
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-[#0F172A] mb-1">
-                    Prescription Photo (Optional)
-                  </label>
+                  <div className="flex justify-between items-center mb-1">
+                    <label className="block text-xs font-bold text-[#0F172A]">
+                      Doctor Prescription Photo
+                    </label>
+                    <span className="text-[10px] text-[#2563EB] font-semibold">Tesseract OCR</span>
+                  </div>
                   <label className="flex items-center justify-center space-x-2 py-2 px-3 border border-dashed border-[#CBD5E1] rounded-xl bg-[#F8FAFC] hover:bg-white text-xs text-[#475569] font-semibold cursor-pointer">
                     <Upload className="w-3.5 h-3.5 text-[#2563EB]" />
                     <span>{prescriptionImage ? 'Prescription Attached' : 'Upload Doctor Rx / Photo'}</span>
@@ -497,6 +674,68 @@ export default function NonCriticalRequestModal({ category, coords, onClose, onR
                   </label>
                 </div>
               </div>
+
+              {/* Demo Prescription Test Button */}
+              <div className="flex items-center justify-between bg-blue-50/70 p-2 rounded-xl border border-blue-100">
+                <span className="text-[11px] text-blue-900 font-medium flex items-center gap-1">
+                  <Sparkles className="w-3.5 h-3.5 text-blue-600" />
+                  Have no Rx image? Test free in-browser OCR:
+                </span>
+                <button
+                  type="button"
+                  onClick={() => handleLoadDemoPrescription('medicine')}
+                  disabled={isScanningOcr}
+                  className="text-[11px] px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg transition shadow-xs flex items-center gap-1 cursor-pointer"
+                >
+                  {isScanningOcr ? <Loader2 className="w-3 h-3 animate-spin" /> : '⚡ Test with Demo Rx'}
+                </button>
+              </div>
+
+              {/* OCR Scanning Progress Box */}
+              {isScanningOcr && (
+                <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl space-y-1.5 animate-pulse">
+                  <div className="flex justify-between items-center">
+                    <div className="flex items-center space-x-2">
+                      <Loader2 className="w-4 h-4 text-blue-700 animate-spin" />
+                      <span className="text-xs font-bold text-blue-900">{ocrProgress.message || 'Scanning Rx with Tesseract OCR...'}</span>
+                    </div>
+                    <span className="text-xs font-black text-blue-800">{ocrProgress.progress}%</span>
+                  </div>
+                  <div className="w-full bg-blue-200 rounded-full h-1.5 overflow-hidden">
+                    <div className="bg-blue-600 h-1.5 rounded-full transition-all duration-300" style={{ width: `${ocrProgress.progress}%` }}></div>
+                  </div>
+                </div>
+              )}
+
+              {/* OCR Result Card */}
+              {ocrData && !isScanningOcr && (
+                <div className={`p-3 rounded-xl border space-y-2 ${ocrData.isValid ? 'bg-emerald-50 border-emerald-200' : 'bg-amber-50 border-amber-200'}`}>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-1.5">
+                      <ShieldCheck className={`w-4 h-4 ${ocrData.isValid ? 'text-emerald-600' : 'text-amber-600'}`} />
+                      <span className={`text-xs font-bold ${ocrData.isValid ? 'text-emerald-900' : 'text-amber-900'}`}>{ocrData.badgeLabel}</span>
+                    </div>
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${ocrData.isValid ? 'bg-emerald-200 text-emerald-800' : 'bg-amber-200 text-amber-800'}`}>
+                      {ocrData.confidence}% Match
+                    </span>
+                  </div>
+                  {ocrData.doctorInfo && (
+                    <p className="text-[11px] text-emerald-800">
+                      🩺 <strong>{ocrData.doctorInfo.name}</strong> ({ocrData.doctorInfo.clinicOrHospital}) {ocrData.doctorInfo.regNumber && <span className="text-[10px] text-emerald-600 font-mono">[{ocrData.doctorInfo.regNumber}]</span>}
+                    </p>
+                  )}
+                  {ocrData.medicines && ocrData.medicines.length > 0 && (
+                    <div className="text-[11px] text-emerald-800 bg-emerald-100/60 p-2 rounded-lg space-y-1">
+                      <p className="font-bold text-[10px] uppercase tracking-wider text-emerald-900">Auto-extracted Medicines:</p>
+                      <ul className="list-disc pl-4 space-y-0.5">
+                        {ocrData.medicines.map((m, idx) => (
+                          <li key={idx} className="font-medium">{m}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
 

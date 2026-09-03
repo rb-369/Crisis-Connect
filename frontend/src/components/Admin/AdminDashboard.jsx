@@ -256,7 +256,7 @@ export default function AdminDashboard({ onOpenMap, currentUser, onOpenAuthModal
 
                     {/* Specific details */}
                     {req.service_details && (
-                      <div className="p-2.5 rounded-xl bg-[#F8FAFC] border border-[#E2E8F0] text-xs text-[#475569] space-y-0.5">
+                      <div className="p-2.5 rounded-xl bg-[#F8FAFC] border border-[#E2E8F0] text-xs text-[#475569] space-y-1">
                         {req.service_details.hospital_name && (
                           <p><strong>Hospital / Clinic:</strong> {req.service_details.hospital_name}</p>
                         )}
@@ -268,6 +268,30 @@ export default function AdminDashboard({ onOpenMap, currentUser, onOpenAuthModal
                         )}
                         {req.service_details.persons_count && (
                           <p><strong>Persons:</strong> {req.service_details.persons_count} displaced individuals</p>
+                        )}
+
+                        {/* OCR Verification Tag */}
+                        {req.service_details.ocr_verification && (
+                          <div className="pt-1.5 mt-1 border-t border-[#E2E8F0] flex flex-wrap items-center gap-2">
+                            <span className={`text-[10px] font-black px-2 py-0.5 rounded-full flex items-center gap-1 ${
+                              req.service_details.ocr_verification.is_verified
+                                ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                                : 'bg-amber-100 text-amber-800 border border-amber-300'
+                            }`}>
+                              <ShieldCheck className="w-3 h-3" />
+                              {req.service_details.ocr_verification.badge_label || 'OCR Verified Rx'}
+                            </span>
+                            {req.service_details.ocr_verification.doctor_info && (
+                              <span className="text-[11px] text-emerald-900 font-semibold">
+                                🩺 {req.service_details.ocr_verification.doctor_info.name} ({req.service_details.ocr_verification.doctor_info.clinicOrHospital})
+                              </span>
+                            )}
+                            {req.service_details.ocr_verification.confidence > 0 && (
+                              <span className="text-[10px] font-mono text-slate-500">
+                                ({req.service_details.ocr_verification.confidence}% match)
+                              </span>
+                            )}
+                          </div>
                         )}
                       </div>
                     )}
@@ -303,7 +327,12 @@ export default function AdminDashboard({ onOpenMap, currentUser, onOpenAuthModal
                     {req.photo_url && (
                       <div className="mt-2 text-xs flex items-center space-x-2 text-[#0284C7] bg-[#E0F2FE] border border-[#BAE6FD] px-3 py-1.5 rounded-xl font-bold w-fit">
                         <ShieldCheck className="w-4 h-4 text-[#0284C7] flex-shrink-0" />
-                        <span>On-Scene Evidence Proof: {req.photo_url}</span>
+                        <span>Prescription / Document Attached</span>
+                        {req.photo_url.startsWith('data:image') && (
+                          <a href={req.photo_url} target="_blank" rel="noreferrer" className="underline ml-2 text-blue-700">
+                            View Rx Image
+                          </a>
+                        )}
                       </div>
                     )}
                   </div>

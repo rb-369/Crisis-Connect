@@ -773,7 +773,7 @@ export default function VolunteerMock({ currentUser, onOpenAuthModal }) {
                           {r.service_details && (
                             <div className="mt-1.5 text-[11px] text-[#475569] space-y-0.5">
                               {r.service_details.hospital_name && (
-                                <p><strong>Hospital:</strong> {r.service_details.hospital_name}</p>
+                                <p><strong>Hospital / Dispatch:</strong> {r.service_details.hospital_name}</p>
                               )}
                               {r.service_details.oxygen_type && (
                                 <p><strong>Oxygen:</strong> {r.service_details.oxygen_type} ({r.service_details.flow_rate})</p>
@@ -783,6 +783,22 @@ export default function VolunteerMock({ currentUser, onOpenAuthModal }) {
                               )}
                               {r.service_details.persons_count && (
                                 <p><strong>Count:</strong> {r.service_details.persons_count} persons</p>
+                              )}
+                              {r.service_details.ocr_verification && (
+                                <div className="pt-1 flex items-center gap-1.5 flex-wrap">
+                                  <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-md ${
+                                    r.service_details.ocr_verification.is_verified
+                                      ? 'bg-emerald-100 text-emerald-800'
+                                      : 'bg-amber-100 text-amber-800'
+                                  }`}>
+                                    {r.service_details.ocr_verification.is_verified ? '✓ Verified Doctor Rx' : '⚠ Unverified Rx (Needs Check)'}
+                                  </span>
+                                  {r.service_details.ocr_verification.doctor_info && (
+                                    <span className="text-[10px] text-emerald-800 font-semibold truncate max-w-[220px]">
+                                      🩺 {r.service_details.ocr_verification.doctor_info.name}
+                                    </span>
+                                  )}
+                                </div>
                               )}
                             </div>
                           )}

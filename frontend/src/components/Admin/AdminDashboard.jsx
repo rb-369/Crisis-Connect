@@ -26,12 +26,16 @@ export default function AdminDashboard({ onOpenMap, currentUser, onOpenAuthModal
   const fetchRequests = async () => {
     setLoading(true);
     try {
-      const data = await api.getRequests(statusFilter || null);
-      // Always keep newest requests up (created_at desc)
-      const sorted = (data || []).sort(
-        (a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0)
-      );
-      setRequests(sorted);
+      const isSpecialFilter = statusFilter === 'clusters' || statusFilter === 'expired';
+      const adminParam = isSpecialFilter ? null : (statusFilter || null);
+      const data = await api.getRequests(adminParam, false, 'priority');
+      let filtered = data || [];
+      if (statusFilter === 'clusters') {
+        filtered = filtered.filter((r) => (r.linked_count || 0) > 0);
+      } else if (statusFilter === 'expired') {
+        filtered = filtered.filter((r) => r.status === 'expired' || r.is_stale);
+      }
+      setRequests(filtered);
     } catch (err) {
       console.error('Failed to load admin queue:', err);
     } finally {
@@ -74,6 +78,21 @@ export default function AdminDashboard({ onOpenMap, currentUser, onOpenAuthModal
       );
     } catch (err) {
       console.error('Failed to triage request:', err);
+    } finally {
+      setActionInProgress(null);
+    }
+  };
+
+  const handleExpire = async (requestId) => {
+    if (!window.confirm('Mark this emergency request as expired / stale to remove it from volunteer feeds?')) return;
+    setActionInProgress(requestId);
+    try {
+      const res = await api.expireRequest(requestId);
+      setRequests((prev) =>
+        prev.map((r) => (r.id === requestId ? { ...r, ...res.request, status: 'expired' } : r))
+      );
+    } catch (err) {
+      console.error('Failed to expire request:', err);
     } finally {
       setActionInProgress(null);
     }
@@ -166,6 +185,8 @@ export default function AdminDashboard({ onOpenMap, currentUser, onOpenAuthModal
           { id: '', label: 'All Requests' },
           { id: 'pending', label: 'Pending Review' },
           { id: 'approved', label: 'Approved & Dispatched' },
+          { id: 'clusters', label: '👥 Incident Clusters (Duplicates)' },
+          { id: 'expired', label: '⏳ Stale / Expired' },
           { id: 'flagged', label: 'Flagged / Investigate' },
           { id: 'rejected', label: 'Rejected / Spam' },
         ].map((tab) => (
@@ -244,6 +265,28 @@ export default function AdminDashboard({ onOpenMap, currentUser, onOpenAuthModal
                           : 'bg-[#F1F5F9] text-[#475569] border border-[#CBD5E1]'
                       }`}>
                         Admin: {req.admin_status}
+                      </span>
+
+                      {/* Priority Score Pill */}
+                      {req.priority_score !== undefined && (
+                        <span className={`px-2.5 py-1 rounded-lg text-[11px] font-mono font-black shadow-2xs ${
+                          req.priority_score >= 70 ? 'bg-red-600 text-white' :
+                          req.priority_score >= 45 ? 'bg-amber-500 text-white' :
+                          'bg-blue-600 text-white'
+                        }`}>
+                          🔥 Score: {req.priority_score}/100
+                        </span>
+                      )}
+
+                      {/* Request Lifecycle Status */}
+                      <span className={`px-2.5 py-1 rounded-lg text-[11px] font-mono font-bold capitalize ${
+                        req.status === 'expired'
+                          ? 'bg-amber-200 text-amber-900 border border-amber-300'
+                          : req.status === 'resolved'
+                          ? 'bg-slate-200 text-slate-700'
+                          : 'bg-emerald-100 text-emerald-800'
+                      }`}>
+                        {req.status}
                       </span>
 
                       {/* Step 8 Duplicate Indicator */}
@@ -366,11 +409,24 @@ export default function AdminDashboard({ onOpenMap, currentUser, onOpenAuthModal
                       disabled={actionInProgress === req.id || req.admin_status === 'rejected'}
                       onClick={() => handleTriage(req.id, 'rejected')}
                       title="Reject fake or duplicate report"
-                      className="px-3 py-2 rounded-xl bg-[#DC2626] hover:bg-[#B91C1C] text-white text-xs font-bold transition flex items-center space-x-1.5 disabled:opacity-30 shadow-sm"
+                      className="px-3.5 py-2 rounded-xl bg-[#DC2626] hover:bg-[#B91C1C] text-white text-xs font-bold transition flex items-center space-x-1.5 disabled:opacity-30 shadow-sm cursor-pointer"
                     >
                       <X className="w-4 h-4" />
                       <span>Reject</span>
                     </button>
+
+                    {/* Expire / Prune Stale Action */}
+                    {req.status !== 'expired' && (
+                      <button
+                        disabled={actionInProgress === req.id}
+                        onClick={() => handleExpire(req.id)}
+                        title="Mark request as expired to remove from active volunteer radar"
+                        className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-900 text-amber-300 text-xs font-bold transition flex items-center space-x-1.5 disabled:opacity-30 shadow-sm cursor-pointer"
+                      >
+                        <Clock className="w-3.5 h-3.5 text-amber-400" />
+                        <span>Expire</span>
+                      </button>
+                    )}
                   </div>
 
                 </div>

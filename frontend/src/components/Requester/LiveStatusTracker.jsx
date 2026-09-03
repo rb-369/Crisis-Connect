@@ -21,7 +21,9 @@ import {
   Wind,
   Home,
   Utensils,
-  Sparkles
+  Sparkles,
+  Users,
+  RefreshCw,
 } from 'lucide-react';
 import { CrisisWebSocketClient } from '../../services/websocket';
 import { api } from '../../services/api';
@@ -45,6 +47,8 @@ export default function LiveStatusTracker({ initialRequest, onNewRequest }) {
   const [wsStatus, setWsStatus] = useState('connecting');
   const [isPlayingAudio, setIsPlayingAudio] = useState(false);
   const [isResolving, setIsResolving] = useState(false);
+  const [isHeartbeating, setIsHeartbeating] = useState(false);
+  const [heartbeatMessage, setHeartbeatMessage] = useState(null);
   const [matchNotification, setMatchNotification] = useState(null);
   const audioPlayerRef = useRef(null);
 
@@ -140,6 +144,24 @@ export default function LiveStatusTracker({ initialRequest, onNewRequest }) {
     }
   };
 
+  const handleHeartbeat = async () => {
+    if (!request?.id) return;
+    setIsHeartbeating(true);
+    try {
+      const res = await api.sendHeartbeat(request.id);
+      if (res && res.request) {
+        setRequest((prev) => ({ ...prev, ...res.request }));
+      }
+      setHeartbeatMessage('✓ Emergency status confirmed active! Dispatch timer refreshed.');
+      setTimeout(() => setHeartbeatMessage(null), 4000);
+    } catch (err) {
+      console.error('Heartbeat failed:', err);
+      setHeartbeatMessage('Failed to update: ' + (err.message || 'Network error'));
+    } finally {
+      setIsHeartbeating(false);
+    }
+  };
+
   const bloodGroup = request.service_details?.blood_group;
   const bloodTheme = bloodGroup ? getBloodGroupTheme(bloodGroup) : null;
   const compatibleDonors = bloodGroup ? getCompatibleDonorsForRecipient(bloodGroup) : [];
@@ -228,6 +250,112 @@ export default function LiveStatusTracker({ initialRequest, onNewRequest }) {
                 Dismiss
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Outdated / Expired Alert Banner with Reactivate Action */}
+      {request.status === 'expired' && (
+        <div className="mb-5 p-5 rounded-2xl bg-amber-50 border-2 border-amber-300 text-amber-900 shadow-md">
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex items-start space-x-3">
+              <div className="p-2.5 rounded-xl bg-amber-200 text-amber-800 flex-shrink-0">
+                <AlertCircle className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="font-extrabold text-amber-900 text-base">
+                  Request Flagged as Expired / Inactive
+                </h3>
+                <p className="text-xs text-amber-800 mt-1 leading-relaxed">
+                  This emergency request passed its response window without a recent confirmation. To prevent volunteers from responding to outdated emergencies, active dispatch was paused.
+                </p>
+                <div className="mt-3 flex items-center space-x-3">
+                  <button
+                    onClick={handleHeartbeat}
+                    disabled={isHeartbeating}
+                    className="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-black shadow transition flex items-center space-x-1.5 cursor-pointer disabled:opacity-50"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${isHeartbeating ? 'animate-spin' : ''}`} />
+                    <span>{isHeartbeating ? 'Reactivating...' : 'I Still Need Help (Reactivate)'}</span>
+                  </button>
+                  <button
+                    onClick={handleConfirmResolution}
+                    className="px-3 py-2 rounded-xl bg-amber-100 hover:bg-amber-200 text-amber-900 text-xs font-bold transition cursor-pointer"
+                  >
+                    Close / Received Help
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Interactive Liveness Heartbeat Check-In ("Still Need Help?") */}
+      {request.status === 'requested' && (
+        <div className="mb-5 p-4 rounded-2xl bg-gradient-to-r from-slate-900 to-slate-800 text-white shadow-lg border border-slate-700 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center space-x-3">
+            <div className="w-9 h-9 rounded-xl bg-blue-600/30 border border-blue-500/50 flex items-center justify-center text-blue-400 flex-shrink-0 animate-pulse">
+              <Clock className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="flex items-center space-x-2">
+                <span className="text-xs font-black uppercase tracking-wider text-blue-400">
+                  Liveness Verification
+                </span>
+                {request.priority_score && (
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-red-500/20 text-red-300 border border-red-500/30">
+                    Priority Score: {request.priority_score}/100
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-slate-300 font-medium mt-0.5">
+                Confirm your emergency is still active so nearby volunteers know you are waiting.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center space-x-2 flex-shrink-0">
+            <button
+              onClick={handleHeartbeat}
+              disabled={isHeartbeating}
+              className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-black shadow transition flex items-center space-x-1.5 cursor-pointer disabled:opacity-50"
+            >
+              <CheckCircle2 className={`w-3.5 h-3.5 ${isHeartbeating ? 'animate-spin' : ''}`} />
+              <span>{isHeartbeating ? 'Updating...' : 'Still Waiting'}</span>
+            </button>
+            <button
+              onClick={handleConfirmResolution}
+              disabled={isResolving}
+              className="px-3 py-1.5 rounded-xl bg-slate-700 hover:bg-slate-600 text-slate-300 text-xs font-bold transition cursor-pointer"
+            >
+              Help Received
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Heartbeat feedback message */}
+      {heartbeatMessage && (
+        <div className="mb-4 p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-bold flex items-center space-x-2 animate-in fade-in duration-200">
+          <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+          <span>{heartbeatMessage}</span>
+        </div>
+      )}
+
+      {/* Co-located Incident Cluster Notice */}
+      {request.linked_count > 0 && (
+        <div className="mb-5 p-3.5 rounded-2xl bg-amber-50 border border-amber-200 text-amber-900 flex items-center space-x-3 shadow-sm">
+          <div className="p-2 rounded-xl bg-amber-200 text-amber-800 flex-shrink-0">
+            <Users className="w-4 h-4 animate-pulse text-amber-600" />
+          </div>
+          <div className="text-xs">
+            <span className="font-extrabold text-amber-900">
+              Corroborated Incident Cluster:
+            </span>{' '}
+            <span className="text-amber-800">
+              {request.linked_count} other resident{request.linked_count > 1 ? 's' : ''} in your immediate area also requested {request.category}. Your reports are combined into a high-priority dispatch cluster.
+            </span>
           </div>
         </div>
       )}

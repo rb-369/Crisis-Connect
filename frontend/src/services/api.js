@@ -60,8 +60,12 @@ export const api = {
     body: JSON.stringify(data),
   }),
 
-  getRequests: (adminStatus) => {
-    const query = adminStatus ? `?admin_status=${encodeURIComponent(adminStatus)}` : '';
+  getRequests: (adminStatus = null, excludeExpired = false, sortBy = 'priority') => {
+    const params = new URLSearchParams();
+    if (adminStatus) params.append('admin_status', adminStatus);
+    if (excludeExpired) params.append('exclude_expired', 'true');
+    if (sortBy) params.append('sort_by', sortBy);
+    const query = params.toString() ? `?${params.toString()}` : '';
     return fetchJson(`/requests${query}`);
   },
 
@@ -70,6 +74,14 @@ export const api = {
   patchRequest: (id, updates) => fetchJson(`/requests/${id}`, {
     method: 'PATCH',
     body: JSON.stringify(updates),
+  }),
+
+  sendHeartbeat: (id) => fetchJson(`/requests/${id}/heartbeat`, {
+    method: 'POST',
+  }),
+
+  expireRequest: (id) => fetchJson(`/requests/${id}/expire`, {
+    method: 'POST',
   }),
 
   // Chat Messages

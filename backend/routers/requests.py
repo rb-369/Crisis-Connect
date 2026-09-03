@@ -8,6 +8,10 @@ from database import (
     db_get_request,
     db_update_request,
     db_get_linked_count,
+    db_heartbeat_request,
+    db_expire_stale_requests,
+    compute_priority_score,
+    check_is_stale,
     mem_db,
 )
 from websocket_manager import ws_manager
@@ -59,17 +63,17 @@ class HelperAcceptPayload(BaseModel):
 async def create_request(payload: RequestCreate):
     """
     Step 1 & 2: Create a crisis request.
-    Supports Non-Critical Emergency requests (Blood, Oxygen, Meds, Food, Shelter, Transport)
-    with service_details, voice notes, and media.
-    Auto-promotes oxygen and rescue to high urgency.
-    Broadcasts 'new_request' event over WebSocket across all channels.
+    Supports Non-Critical & Critical Emergency requests with device debounce,
+    spatial-temporal clustering, and priority & genuineness scoring.
     """
     data_dict = payload.model_dump()
     created = await db_create_request(data_dict)
 
-    # Attach linked_count if any duplicate was identified
+    # Attach linked_count and priority score
     linked_count = await db_get_linked_count(created["id"])
     created["linked_count"] = linked_count
+    created["priority_score"] = compute_priority_score(created, linked_count)
+    created["is_stale"] = check_is_stale(created)
 
     # Broadcast to admin, volunteers, and request channel
     await ws_manager.broadcast("admin", "new_request", created)
@@ -96,15 +100,20 @@ async def reseed_database():
 
 
 @router.get("")
-async def list_requests(admin_status: Optional[str] = Query(None)):
+async def list_requests(
+    admin_status: Optional[str] = Query(None),
+    exclude_expired: bool = Query(False),
+    sort_by: Optional[str] = Query("priority"),
+):
     """
-    Step 1 & 4: List requests with optional admin_status filtering.
-    Enriches with linked duplicate count for Step 8.
+    List requests with priority & genuineness scoring, duplicate counts,
+    and optional exclusion of expired requests for volunteer dispatch.
     """
-    items = await db_list_requests(admin_status=admin_status)
-    for req in items:
-        req["linked_count"] = await db_get_linked_count(req["id"])
-    return items
+    return await db_list_requests(
+        admin_status=admin_status,
+        exclude_expired=exclude_expired,
+        sort_by=sort_by
+    )
 
 
 @router.get("/{request_id}")
@@ -113,15 +122,56 @@ async def get_request(request_id: str):
     if not req:
         raise HTTPException(status_code=404, detail="Request not found")
     req["linked_count"] = await db_get_linked_count(request_id)
+    req["priority_score"] = compute_priority_score(req, req["linked_count"])
+    req["is_stale"] = check_is_stale(req)
     return req
+
+
+@router.post("/{request_id}/heartbeat")
+async def heartbeat_request(request_id: str):
+    """
+    Requester Liveness Heartbeat ('Still Need Help?').
+    Extends category TTL, resets staleness, and confirms emergency is still genuine and active.
+    """
+    updated = await db_heartbeat_request(request_id)
+    if not updated:
+        raise HTTPException(status_code=404, detail="Request not found")
+
+    await ws_manager.broadcast(f"request:{request_id}", "heartbeat_confirmed", updated)
+    await ws_manager.broadcast("admin", "status_update", updated)
+    await ws_manager.broadcast("volunteers", "status_update", updated)
+    await ws_manager.broadcast_all("status_update", updated)
+
+    return {"status": "heartbeat_received", "request": updated}
+
+
+@router.post("/{request_id}/expire")
+async def expire_request(request_id: str):
+    """
+    Explicitly marks a request as expired / stale.
+    Removes it from active volunteer feeds.
+    """
+    req = await db_get_request(request_id)
+    if not req:
+        raise HTTPException(status_code=404, detail="Request not found")
+
+    updated = await db_update_request(request_id, {"status": "expired"})
+    updated["linked_count"] = await db_get_linked_count(request_id)
+    updated["priority_score"] = compute_priority_score(updated, updated["linked_count"])
+
+    await ws_manager.broadcast(f"request:{request_id}", "status_update", updated)
+    await ws_manager.broadcast("admin", "status_update", updated)
+    await ws_manager.broadcast("volunteers", "status_update", updated)
+    await ws_manager.broadcast_all("status_update", updated)
+
+    return {"status": "expired", "request": updated}
 
 
 @router.patch("/{request_id}")
 async def update_request(request_id: str, payload: RequestUpdate):
     """
-    Step 1 & 3 & 4: Update request.
-    Supports admin triage (approve/reject/flag), Step 3 optional enrichment,
-    and live status lifecycle progression.
+    Update request.
+    Supports admin triage, optional enrichment, and status lifecycle progression.
     Broadcasts 'status_update' over WebSocket.
     """
     existing = await db_get_request(request_id)
@@ -133,7 +183,10 @@ async def update_request(request_id: str, payload: RequestUpdate):
         return existing
 
     updated = await db_update_request(request_id, updates)
-    updated["linked_count"] = await db_get_linked_count(request_id)
+    linked_count = await db_get_linked_count(request_id)
+    updated["linked_count"] = linked_count
+    updated["priority_score"] = compute_priority_score(updated, linked_count)
+    updated["is_stale"] = check_is_stale(updated)
 
     # Broadcast updates
     await ws_manager.broadcast(f"request:{request_id}", "status_update", updated)

@@ -108,7 +108,61 @@ def test_endpoints():
     assert "already been accepted" in res_accept2.json()["detail"]
     print("[PASS] POST /requests/{id}/accept (Second responder) -> 409 Conflict Guard working!")
 
-    print("\n>>> ALL BACKEND API ENDPOINTS & LIVE SUPABASE INTEGRATION PASSED SUCCESSFULLY! <<<")
+    # 11. Device Debounce Prevention Test
+    # Submitting identical category from same device within 2 minutes returns existing record
+    res_debounce = client.post("/requests", json={
+        "category": "oxygen",
+        "lat": 37.776,
+        "lng": -122.418,
+        "requester_device_id": "test-device-uuid-2",
+        "details": "Accidental double tap submission",
+    })
+    assert res_debounce.status_code == 201
+    assert res_debounce.json().get("is_debounced") is True or res_debounce.json()["id"] == oxy_req["id"]
+    print("[PASS] Device Debounce: Double-tap submission prevented and resolved to existing request")
+
+    # 12. Spatio-temporal Cluster Deduplication Test
+    # Submitting a request within 300m of existing unassigned request links to anchor
+    res_cluster = client.post("/requests", json={
+        "category": "oxygen",
+        "lat": 37.7765,  # ~60 meters from oxy_req
+        "lng": -122.4182,
+        "requester_device_id": "test-device-neighbor-uuid",
+        "details": "Also need oxygen cylinder here in same block",
+    })
+    assert res_cluster.status_code == 201
+    clustered_req = res_cluster.json()
+    assert clustered_req["linked_request_id"] == oxy_req["id"]
+    assert clustered_req["linked_count"] >= 1
+    print(f"[PASS] Spatio-Temporal Cluster: Linked request to anchor ID {oxy_req['id']} (Linked Count: {clustered_req['linked_count']})")
+
+    # 13. Priority & Genuineness Score Test
+    # Check that priority_score is calculated and oxygen / confirmed zone has high score
+    assert "priority_score" in clustered_req
+    assert clustered_req["priority_score"] >= 45
+    print(f"[PASS] Priority Scoring: Composite emergency score computed as {clustered_req['priority_score']}/100")
+
+    # 14. Liveness Heartbeat ('Still Need Help?') Test
+    res_hb = client.post(f"/requests/{oxy_req['id']}/heartbeat")
+    assert res_hb.status_code == 200
+    assert res_hb.json()["status"] == "heartbeat_received"
+    assert res_hb.json()["request"]["is_stale"] is False
+    print("[PASS] POST /requests/{id}/heartbeat: Successfully confirmed liveness and extended TTL")
+
+    # 15. Stale Expiration Test
+    res_exp = client.post(f"/requests/{clustered_req['id']}/expire")
+    assert res_exp.status_code == 200
+    assert res_exp.json()["request"]["status"] == "expired"
+    print("[PASS] POST /requests/{id}/expire: Stale emergency marked as expired")
+
+    # 16. Exclude Expired Query Test
+    res_active_only = client.get("/requests?exclude_expired=true")
+    assert res_active_only.status_code == 200
+    active_ids = [r["id"] for r in res_active_only.json()]
+    assert clustered_req["id"] not in active_ids
+    print("[PASS] GET /requests?exclude_expired=true: Expired request excluded from volunteer feed")
+
+    print("\n>>> ALL BACKEND API ENDPOINTS & LIVE DEDUPLICATION/EXPIRY TESTS PASSED! <<<")
 
 if __name__ == "__main__":
     test_endpoints()

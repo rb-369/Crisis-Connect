@@ -1,6 +1,6 @@
 import uuid
 import math
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import Dict, List, Optional, Any
 from config import SUPABASE_URL, SUPABASE_KEY, USE_LIVE_SUPABASE
 
@@ -427,18 +427,170 @@ def haversine_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> fl
     return R * c
 
 
+# Category-specific Time-To-Live (TTL) configuration in seconds
+CATEGORY_TTLS_SECONDS = {
+    "rescue": 45 * 60,     # 45 minutes - high urgency life-safety
+    "oxygen": 45 * 60,     # 45 minutes - critical respiratory aid
+    "blood": 120 * 60,     # 2 hours - urgent medical requirement
+    "medicine": 180 * 60,  # 3 hours - pharmacy & essential prescriptions
+    "food": 240 * 60,      # 4 hours - humanitarian rations & drinking water
+    "shelter": 240 * 60,   # 4 hours - evacuation accommodation
+    "transport": 180 * 60, # 3 hours - evacuation & medical transit
+}
+DEFAULT_TTL_SECONDS = 180 * 60
+
+
+def compute_priority_score(req: Dict[str, Any], linked_count: int = 0) -> int:
+    """
+    Computes an Emergency Priority & Genuineness Score (0 - 100).
+    Combines:
+    1. Base Category Urgency (0-40 pts)
+    2. Disaster Zone Corroboration (0-25 pts)
+    3. Crowd Co-location / Duplicate Clustering (0-20 pts)
+    4. Heartbeat / Freshness Recency (0-15 pts)
+    """
+    category = req.get("category", "").lower()
+    urgency = req.get("urgency", "normal")
+
+    # 1. Base Severity (0 - 40 pts)
+    base_scores = {
+        "rescue": 40,
+        "oxygen": 35,
+        "blood": 30,
+        "medicine": 25,
+        "food": 20,
+        "shelter": 18,
+        "transport": 16,
+    }
+    score = base_scores.get(category, 15)
+    if urgency == "high" and score < 35:
+        score = 35
+
+    # 2. Zone Corroboration (0 - 25 pts)
+    # If the incident is crowd-confirmed or within an official disaster zone
+    if req.get("zone_confirmed") or req.get("ml_status") in ["high_priority", "flood_zone", "active_cluster"]:
+        score += 25
+
+    # 3. Crowd Corroboration / Linked Request Cluster (0 - 20 pts)
+    # Each nearby resident reporting the same emergency adds +8 pts (up to 20 pts)
+    score += min(20, linked_count * 8)
+
+    # 4. Freshness & Heartbeat Recency (0 - 15 pts)
+    ref_time_str = req.get("last_heartbeat_at") or req.get("created_at")
+    if ref_time_str:
+        try:
+            ref_time = datetime.fromisoformat(ref_time_str.replace("Z", "+00:00"))
+            age_seconds = (datetime.now(timezone.utc) - ref_time).total_seconds()
+            if age_seconds < 15 * 60:      # Fresh < 15 mins
+                score += 15
+            elif age_seconds < 45 * 60:    # Active < 45 mins
+                score += 8
+            elif age_seconds < 90 * 60:    # Moderate < 90 mins
+                score += 4
+        except Exception:
+            score += 5
+
+    return min(100, max(10, score))
+
+
+def check_is_stale(req: Dict[str, Any]) -> bool:
+    """Returns True if the request is awaiting response and has exceeded 50% of its TTL without heartbeat."""
+    if req.get("status") in ["matched", "en_route", "on_the_way", "arrived", "resolved", "expired"]:
+        return False
+    ref_time_str = req.get("last_heartbeat_at") or req.get("created_at")
+    if not ref_time_str:
+        return False
+    try:
+        ref_time = datetime.fromisoformat(ref_time_str.replace("Z", "+00:00"))
+        age = (datetime.now(timezone.utc) - ref_time).total_seconds()
+        cat = req.get("category", "").lower()
+        ttl = CATEGORY_TTLS_SECONDS.get(cat, DEFAULT_TTL_SECONDS)
+        return age >= (ttl * 0.5)
+    except Exception:
+        return False
+
+
+async def db_expire_stale_requests() -> List[str]:
+    """Sweeps unassigned requests that have passed their expiration timestamp without a heartbeat."""
+    expired_ids = []
+    now = datetime.now(timezone.utc)
+    for req_id, req in list(mem_db.requests.items()):
+        if req.get("status") == "requested":
+            expires_at_str = req.get("expires_at")
+            if expires_at_str:
+                try:
+                    exp_dt = datetime.fromisoformat(expires_at_str.replace("Z", "+00:00"))
+                    if now > exp_dt:
+                        req["status"] = "expired"
+                        req["updated_at"] = now.isoformat()
+                        expired_ids.append(req_id)
+                except Exception:
+                    pass
+    return expired_ids
+
+
+async def db_heartbeat_request(request_id: str) -> Optional[Dict[str, Any]]:
+    """
+    Extends the TTL and confirms that the requester is still actively awaiting assistance.
+    Resets staleness and extends expires_at.
+    """
+    req = await db_get_request(request_id)
+    if not req:
+        return None
+    now_dt = datetime.now(timezone.utc)
+    now_iso = now_dt.isoformat()
+    cat = req.get("category", "").lower()
+    ttl = CATEGORY_TTLS_SECONDS.get(cat, DEFAULT_TTL_SECONDS)
+    new_expires_at = (now_dt + timedelta(seconds=ttl)).isoformat()
+
+    updates = {
+        "last_heartbeat_at": now_iso,
+        "expires_at": new_expires_at,
+        "updated_at": now_iso,
+        "status": "requested" if req.get("status") == "expired" else req.get("status", "requested"),
+    }
+    updated = await db_update_request(request_id, updates)
+    if updated:
+        linked_count = await db_get_linked_count(request_id)
+        updated["linked_count"] = linked_count
+        updated["priority_score"] = compute_priority_score(updated, linked_count)
+        updated["is_stale"] = False
+    return updated
+
+
 # Database Operations (Abstraction Layer)
 
 async def db_create_request(data: Dict[str, Any]) -> Dict[str, Any]:
     req_id = data.get("id") or str(uuid.uuid4())
-    now_iso = datetime.now(timezone.utc).isoformat()
+    now_dt = datetime.now(timezone.utc)
+    now_iso = now_dt.isoformat()
     
     category = data.get("category", "").lower()
     urgency = data.get("urgency", "normal")
     if category in ("oxygen", "rescue") and urgency != "high":
         urgency = "high"
 
-    # Duplicate check: check if any recent active request exists within 300 meters with same category
+    device_id = data.get("requester_device_id", "anon-device")
+
+    # 1. Device Debounce Prevention:
+    # If the same device already submitted the same category in 'requested' status within 2 minutes,
+    # return the existing active request rather than creating a duplicate!
+    for existing in mem_db.requests.values():
+        if (
+            existing.get("requester_device_id") == device_id
+            and existing.get("category") == category
+            and existing.get("status") == "requested"
+        ):
+            try:
+                created_dt = datetime.fromisoformat(existing.get("created_at", "").replace("Z", "+00:00"))
+                if (now_dt - created_dt).total_seconds() < 120:
+                    existing["is_debounced"] = True
+                    return existing
+            except Exception:
+                pass
+
+    # 2. Duplicate Check & Spatial-Temporal Clustering:
+    # If an active request exists within 300 meters and same category, link to anchor request
     linked_id = data.get("linked_request_id")
     if not linked_id:
         try:
@@ -448,12 +600,29 @@ async def db_create_request(data: Dict[str, Any]) -> Dict[str, Any]:
                 if existing.get("category") == category and existing.get("status") == "requested":
                     dist = haversine_distance(req_lat, req_lng, existing.get("lat", 0), existing.get("lng", 0))
                     if dist <= 300:
-                        linked_id = existing.get("id")
+                        linked_id = existing.get("linked_request_id") or existing.get("id")
+                        # Aggregate notes & details into anchor request
+                        anchor_req = mem_db.requests.get(linked_id)
+                        if anchor_req:
+                            new_detail = data.get("details")
+                            if new_detail and new_detail not in (anchor_req.get("details") or ""):
+                                anchor_req["details"] = (anchor_req.get("details") or "") + f" | [Corroborated Note]: {new_detail}"
+                            # Aggregate quantities if available
+                            if data.get("service_details") and anchor_req.get("service_details"):
+                                if "persons_count" in data["service_details"] and "persons_count" in anchor_req["service_details"]:
+                                    try:
+                                        anchor_req["service_details"]["persons_count"] += int(data["service_details"]["persons_count"])
+                                    except Exception:
+                                        pass
                         break
         except Exception:
             pass
 
-    # Non-critical requests (blood, oxygen, medicine, food, shelter, transport) are auto-approved for instant matching
+    # Compute category-aware expiration TTL
+    ttl_seconds = CATEGORY_TTLS_SECONDS.get(category, DEFAULT_TTL_SECONDS)
+    expires_at = (now_dt + timedelta(seconds=ttl_seconds)).isoformat()
+
+    # Non-critical requests are auto-approved for instant matching
     admin_status = data.get("admin_status")
     if not admin_status:
         admin_status = "approved"
@@ -465,7 +634,7 @@ async def db_create_request(data: Dict[str, Any]) -> Dict[str, Any]:
         "status": data.get("status", "requested"),
         "lat": float(data.get("lat", 19.0760)),
         "lng": float(data.get("lng", 72.8777)),
-        "requester_device_id": data.get("requester_device_id", "anon-device"),
+        "requester_device_id": device_id,
         "requester_name": data.get("requester_name"),
         "requester_phone": data.get("requester_phone"),
         "details": data.get("details"),
@@ -476,6 +645,8 @@ async def db_create_request(data: Dict[str, Any]) -> Dict[str, Any]:
         "zone_confirmed": data.get("zone_confirmed", False),
         "ml_status": data.get("ml_status"),
         "linked_request_id": linked_id,
+        "last_heartbeat_at": now_iso,
+        "expires_at": expires_at,
         "created_at": now_iso,
         "updated_at": now_iso,
     }
@@ -494,11 +665,22 @@ async def db_create_request(data: Dict[str, Any]) -> Dict[str, Any]:
     return full_item
 
 
-async def db_list_requests(admin_status: Optional[str] = None) -> List[Dict[str, Any]]:
+async def db_list_requests(
+    admin_status: Optional[str] = None,
+    exclude_expired: bool = False,
+    sort_by: Optional[str] = "priority"
+) -> List[Dict[str, Any]]:
     """
-    Returns requests sorted with newest first (created_at descending)
-    as requested by user.
+    Lists requests enriched with:
+    - linked_count (duplicates in cluster)
+    - priority_score (0-100 emergency priority & genuineness)
+    - is_stale (awaiting heartbeat)
+    Filters out expired requests if exclude_expired is True.
+    Sorts by 'priority' (highest first) or 'newest' (created_at desc).
     """
+    # 1. Sweep expired requests first
+    await db_expire_stale_requests()
+
     items = []
     if supabase_client:
         try:
@@ -518,12 +700,35 @@ async def db_list_requests(admin_status: Optional[str] = None) -> List[Dict[str,
         if admin_status:
             items = [r for r in items if r.get("admin_status") == admin_status]
 
-    # Sort: Newest requests FIRST (created_at desc)
-    return sorted(
-        items,
-        key=lambda r: r.get("created_at", ""),
-        reverse=True
-    )
+    # Filter out expired if requested (default for volunteers)
+    if exclude_expired:
+        items = [r for r in items if r.get("status") not in ["expired", "resolved"]]
+
+    # Enrich with priority score, linked duplicate count, and staleness
+    enriched = []
+    for req in items:
+        req_copy = dict(req)
+        linked_cnt = await db_get_linked_count(req_copy["id"])
+        req_copy["linked_count"] = linked_cnt
+        req_copy["priority_score"] = compute_priority_score(req_copy, linked_cnt)
+        req_copy["is_stale"] = check_is_stale(req_copy)
+        enriched.append(req_copy)
+
+    # Sort
+    if sort_by == "priority":
+        # Sort by: Priority Score desc, then created_at desc
+        return sorted(
+            enriched,
+            key=lambda r: (r.get("priority_score", 0), r.get("created_at", "")),
+            reverse=True
+        )
+    else:
+        # Sort: Newest requests FIRST (created_at desc)
+        return sorted(
+            enriched,
+            key=lambda r: r.get("created_at", ""),
+            reverse=True
+        )
 
 
 async def db_get_request(request_id: str) -> Optional[Dict[str, Any]]:
@@ -656,12 +861,18 @@ async def db_list_confirmed_zones() -> List[Dict[str, Any]]:
 
 
 async def db_get_linked_count(request_id: str) -> int:
+    req = mem_db.requests.get(request_id)
+    if not req:
+        return 0
+    # Determine the anchor ID for this incident cluster
+    anchor_id = req.get("linked_request_id") or request_id
+    
     count = 0
-    for r in mem_db.requests.values():
-        if r.get("linked_request_id") == request_id or (
-            r.get("linked_request_id") and r.get("id") != request_id and
-            r.get("linked_request_id") == mem_db.requests.get(request_id, {}).get("linked_request_id")
-        ):
+    for r_id, r in mem_db.requests.items():
+        if r_id == request_id:
+            continue
+        # If r is the anchor, or r links to this anchor, or r links to this request
+        if r_id == anchor_id or r.get("linked_request_id") == anchor_id or r.get("linked_request_id") == request_id:
             count += 1
     return count
 

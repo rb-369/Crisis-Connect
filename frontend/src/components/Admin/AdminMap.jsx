@@ -1,140 +1,137 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { MapContainer, TileLayer, Marker, Popup, Circle, Polyline, useMap } from 'react-leaflet';
-import L from 'leaflet';
+import React, { useEffect, useRef, useState } from 'react';
+import * as maplibregl from 'maplibre-gl';
+import 'maplibre-gl/dist/maplibre-gl.css';
 import { 
-  RefreshCw, 
   Radio, 
-  Users, 
+  RefreshCw, 
+  AlertTriangle, 
   ShieldAlert, 
-  Sparkles, 
+  Users, 
   Check, 
   Flag, 
   X, 
-  MessageSquare, 
-  Send, 
-  Phone, 
   MapPin, 
+  LocateFixed, 
   Truck, 
-  AlertTriangle,
-  LocateFixed,
-  Eye,
-  Filter
+  Phone, 
+  Clock, 
+  Eye, 
+  Layers, 
+  Navigation,
+  Sparkles,
+  Info
 } from 'lucide-react';
 import { api } from '../../services/api';
 import { CrisisWebSocketClient } from '../../services/websocket';
 import DuplicateBadge from '../Requester/DuplicateBadge';
 
-// Helper to center or fly map
-function MapCenterController({ center, zoom }) {
-  const map = useMap();
-  useEffect(() => {
-    if (center) {
-      map.flyTo(center, zoom || 15, { duration: 1.2 });
-    }
-  }, [center, zoom, map]);
-  return null;
-}
-
-// Category-colored SVG pin icons matching design system
-function createCrisisPinIcon(category, urgency, isSelected = false) {
-  const isHigh = urgency === 'high';
-  const colorMap = {
-    rescue: '#991B1B',
-    blood: '#DC2626',
-    oxygen: '#0891B2',
-    medicine: '#2563EB',
-    food: '#D97706',
-    shelter: '#7C3AED',
-    transport: '#0D9488',
-  };
-  const color = colorMap[category] || '#DC2626';
-
-  const html = `
-    <div style="
-      position: relative;
-      width: ${isSelected ? '38px' : '32px'};
-      height: ${isSelected ? '38px' : '32px'};
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      background: ${color};
-      border: ${isSelected ? '3.5px solid #0F172A' : '2.5px solid #FFFFFF'};
-      border-radius: 50%;
-      box-shadow: 0 4px 12px rgba(15, 23, 42, 0.4);
-      transition: all 0.2s ease;
-      ${isHigh ? 'animation: urgent-radar 1.5s infinite;' : ''}
-    ">
-      <div style="width: ${isSelected ? '10px' : '8px'}; height: ${isSelected ? '10px' : '8px'}; background: #FFFFFF; border-radius: 50%;"></div>
-    </div>
-  `;
-
-  return L.divIcon({
-    html,
-    className: 'crisis-map-pin',
-    iconSize: [isSelected ? 38 : 32, isSelected ? 38 : 32],
-    iconAnchor: [isSelected ? 19 : 16, isSelected ? 19 : 16],
-    popupAnchor: [0, -18],
-  });
-}
-
-// Volunteer Marker (Solid Indigo #4338CA with white center pin)
-function createVolunteerPinIcon() {
-  const html = `
-    <div style="
-      position: relative;
-      width: 34px;
-      height: 34px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      background: #4338CA;
-      border: 2.5px solid #FFFFFF;
-      border-radius: 50%;
-      box-shadow: 0 4px 12px rgba(67, 56, 202, 0.45);
-    ">
-      <div style="width: 10px; height: 10px; background: #FFFFFF; border-radius: 50%;"></div>
-    </div>
-  `;
-
-  return L.divIcon({
-    html,
-    className: 'volunteer-map-pin',
-    iconSize: [34, 34],
-    iconAnchor: [17, 17],
-    popupAnchor: [0, -18],
-  });
+// Ray-casting point-in-polygon algorithm (Zero external dependencies)
+function isPointInPolygon(point, polygonCoords) {
+  const [x, y] = point; // [lng, lat]
+  let inside = false;
+  for (let i = 0, j = polygonCoords.length - 1; i < polygonCoords.length; j = i++) {
+    const xi = polygonCoords[i][0], yi = polygonCoords[i][1];
+    const xj = polygonCoords[j][0], yj = polygonCoords[j][1];
+    const intersect = ((yi > y) !== (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi) + xi);
+    if (intersect) inside = !inside;
+  }
+  return inside;
 }
 
 export default function AdminMap() {
+  const mapContainer = useRef(null);
+  const map = useRef(null);
+  const markersRef = useRef({}); // map of id -> maplibregl.Marker
+
   const [requests, setRequests] = useState([]);
-  const [confirmedZones, setConfirmedZones] = useState([]);
+  const [sachetGeoJson, setSachetGeoJson] = useState(null);
+  const [selectedItem, setSelectedItem] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [selectedReq, setSelectedReq] = useState(null);
-  const [mapTarget, setMapTarget] = useState(null);
-  const [activeFilter, setActiveFilter] = useState('all'); // all, urgent, unassigned, matched
+  const [activeFilter, setActiveFilter] = useState('all'); // all, extreme, blood, urgent, unassigned
+  const [userGeoWarning, setUserGeoWarning] = useState(null);
   const [incomingAlert, setIncomingAlert] = useState(null);
   const [actionLoading, setActionLoading] = useState(false);
 
-  const loadMapData = async () => {
+  // 1. Fetch live data
+  const loadData = async () => {
     setLoading(true);
     try {
-      const [reqs, zones] = await Promise.all([
+      const [reqs, alerts] = await Promise.all([
         api.getRequests(),
-        api.getConfirmedZones(),
+        api.getSachetAlerts(),
       ]);
       setRequests(reqs);
-      setConfirmedZones(zones);
+      setSachetGeoJson(alerts);
+
+      // Check User Geolocation against Mumbai Sachet Hazard Polygons
+      if (navigator.geolocation && alerts?.features) {
+        navigator.geolocation.getCurrentPosition((pos) => {
+          const userPt = [pos.coords.longitude, pos.coords.latitude];
+          for (const feat of alerts.features) {
+            const polyCoords = feat.geometry.coordinates[0];
+            if (isPointInPolygon(userPt, polyCoords)) {
+              setUserGeoWarning({
+                headline: feat.properties.headline,
+                district: feat.properties.district,
+                severity: feat.properties.severity,
+              });
+              break;
+            }
+          }
+        }, () => {});
+      }
     } catch (err) {
-      console.error('Failed to load map data:', err);
+      console.error('Failed to load MapLibre data:', err);
     } finally {
       setLoading(false);
     }
   };
 
+  // 2. Initialize MapLibre GL JS centered over Mumbai
   useEffect(() => {
-    loadMapData();
+    if (map.current) return;
 
-    // Subscribe to WebSocket for real-time live updates
+    // Mumbai coordinates: [72.8777, 19.0760] (lng, lat)
+    map.current = new maplibregl.Map({
+      container: mapContainer.current,
+      style: {
+        version: 8,
+        sources: {
+          'osm-tiles': {
+            type: 'raster',
+            tiles: [
+              'https://tile.openstreetmap.org/{z}/{x}/{y}.png'
+            ],
+            tileSize: 256,
+            attribution: '&copy; OpenStreetMap contributors | NDMA Sachet Architecture'
+          }
+        },
+        layers: [
+          {
+            id: 'osm-tiles-layer',
+            type: 'raster',
+            source: 'osm-tiles',
+            minzoom: 0,
+            maxzoom: 19
+          }
+        ]
+      },
+      center: [72.8777, 19.0760], // Mumbai Center
+      zoom: 12,
+    });
+
+    map.current.addControl(new maplibregl.NavigationControl(), 'top-right');
+
+    map.current.on('load', () => {
+      // Add Sachet GeoJSON Source if already fetched
+      if (sachetGeoJson) {
+        addSachetLayers(sachetGeoJson);
+      }
+    });
+
+    loadData();
+
+    // 3. Native WebSocket for real-time live updates
     const wsClient = new CrisisWebSocketClient(
       'admin',
       'all',
@@ -143,19 +140,16 @@ export default function AdminMap() {
           const newReq = payload.data;
           setRequests((prev) => {
             if (prev.some((r) => r.id === newReq.id)) return prev;
-            return [newReq, ...prev];
+            return [newReq, ...prev]; // Newest first!
           });
-          // Display live incoming toast
           setIncomingAlert(newReq);
           setTimeout(() => setIncomingAlert(null), 6000);
-        } else if (payload.event === 'zone_confirmed' && payload.data) {
-          setConfirmedZones((prev) => [...prev, payload.data]);
         } else if (payload.event === 'status_update' || payload.event === 'matched') {
           setRequests((prev) =>
             prev.map((r) => (r.id === payload.data.id ? { ...r, ...payload.data } : r))
           );
-          if (selectedReq && selectedReq.id === payload.data.id) {
-            setSelectedReq((prev) => ({ ...prev, ...payload.data }));
+          if (selectedItem?.id === payload.data.id) {
+            setSelectedItem((prev) => ({ ...prev, ...payload.data }));
           }
         }
       }
@@ -163,10 +157,221 @@ export default function AdminMap() {
 
     return () => {
       wsClient.close();
+      if (map.current) {
+        map.current.remove();
+        map.current = null;
+      }
     };
-  }, [selectedReq?.id]);
+  }, []);
 
-  // Handle Accept directly from the Map
+  // 4. Add or update Sachet Hazard Polygons Layer
+  const addSachetLayers = (geoJsonData) => {
+    if (!map.current || !map.current.isStyleLoaded()) return;
+
+    if (map.current.getSource('sachet-alerts-source')) {
+      map.current.getSource('sachet-alerts-source').setData(geoJsonData);
+      return;
+    }
+
+    map.current.addSource('sachet-alerts-source', {
+      type: 'geojson',
+      data: geoJsonData,
+    });
+
+    // Dynamic Fill Layer based on Severity (Extreme = #d32f2f, Severe = #f57c00, Moderate = #fbc02d)
+    map.current.addLayer({
+      id: 'alerts-fill',
+      type: 'fill',
+      source: 'sachet-alerts-source',
+      paint: {
+        'fill-color': [
+          'match',
+          ['get', 'severity'],
+          'Extreme', '#DC2626', // Red
+          'Severe', '#EA580C',  // Orange
+          'Moderate', '#EAB308', // Yellow
+          /* fallback */ '#3B82F6'
+        ],
+        'fill-opacity': 0.32,
+      },
+    });
+
+    // Hazard Polygon Borders
+    map.current.addLayer({
+      id: 'alerts-borders',
+      type: 'line',
+      source: 'sachet-alerts-source',
+      paint: {
+        'line-color': [
+          'match',
+          ['get', 'severity'],
+          'Extreme', '#991B1B',
+          'Severe', '#C2410C',
+          'Moderate', '#A16207',
+          /* fallback */ '#1D4ED8'
+        ],
+        'line-width': 2.5,
+      },
+    });
+
+    // Click on Alert Polygon
+    map.current.on('click', 'alerts-fill', (e) => {
+      const feat = e.features[0];
+      const props = feat.properties;
+      setSelectedItem({
+        isSachetAlert: true,
+        ...props,
+      });
+
+      new maplibregl.Popup()
+        .setLngLat(e.lngLat)
+        .setHTML(`
+          <div style="font-family: 'Plus Jakarta Sans', sans-serif; padding: 4px; min-width: 200px;">
+            <span style="font-size: 10px; font-weight: 800; text-transform: uppercase; background: ${props.severity === 'Extreme' ? '#FEE2E2' : '#FEF3C7'}; color: ${props.severity === 'Extreme' ? '#991B1B' : '#B45309'}; padding: 2px 6px; border-radius: 4px;">
+              ${props.severity} Severity Alert
+            </span>
+            <h4 style="margin: 6px 0 3px 0; font-size: 13px; font-weight: 800; color: #0F172A;">${props.headline}</h4>
+            <p style="margin: 0; font-size: 11px; color: #475569; line-height: 1.3;">${props.description}</p>
+            <div style="margin-top: 6px; font-size: 10px; color: #64748B;">District: <strong>${props.district}</strong></div>
+          </div>
+        `)
+        .addTo(map.current);
+    });
+
+    map.current.on('mouseenter', 'alerts-fill', () => {
+      map.current.getCanvas().style.cursor = 'pointer';
+    });
+    map.current.on('mouseleave', 'alerts-fill', () => {
+      map.current.getCanvas().style.cursor = '';
+    });
+  };
+
+  // Sync Sachet layers when data loads
+  useEffect(() => {
+    if (sachetGeoJson && map.current && map.current.isStyleLoaded()) {
+      addSachetLayers(sachetGeoJson);
+    }
+  }, [sachetGeoJson]);
+
+  // 5. Update MapLibre DOM Markers for Emergency Requests & Volunteers
+  useEffect(() => {
+    if (!map.current) return;
+
+    // Filter requests
+    const visibleRequests = requests.filter((r) => {
+      if (activeFilter === 'urgent') return r.urgency === 'high';
+      if (activeFilter === 'blood') return r.category === 'blood';
+      if (activeFilter === 'unassigned') return r.status === 'requested';
+      return true;
+    });
+
+    const currentIds = new Set();
+
+    visibleRequests.forEach((req) => {
+      currentIds.add(req.id);
+      const isHigh = req.urgency === 'high';
+      const isMatched = req.status === 'matched' || req.status === 'en_route' || req.status === 'in_progress';
+      const isSelected = selectedItem?.id === req.id;
+
+      const colorMap = {
+        rescue: '#991B1B',
+        blood: '#DC2626',
+        oxygen: '#0891B2',
+        medicine: '#2563EB',
+        food: '#D97706',
+        shelter: '#7C3AED',
+        transport: '#0D9488',
+      };
+      const catColor = colorMap[req.category] || '#DC2626';
+
+      // Create or update marker
+      if (!markersRef.current[req.id]) {
+        const el = document.createElement('div');
+        el.className = 'custom-maplibre-pin';
+        el.style.width = '32px';
+        el.style.height = '32px';
+        el.style.borderRadius = '50%';
+        el.style.background = catColor;
+        el.style.border = '2.5px solid #FFFFFF';
+        el.style.boxShadow = '0 4px 10px rgba(15,23,42,0.4)';
+        el.style.cursor = 'pointer';
+        el.style.display = 'flex';
+        el.style.alignItems = 'center';
+        el.style.justifyContent = 'center';
+        if (isHigh) {
+          el.style.animation = 'urgent-radar 1.6s infinite';
+        }
+
+        const dot = document.createElement('div');
+        dot.style.width = '8px';
+        dot.style.height = '8px';
+        dot.style.background = '#FFFFFF';
+        dot.style.borderRadius = '50%';
+        el.appendChild(dot);
+
+        el.addEventListener('click', () => {
+          setSelectedItem(req);
+          map.current.flyTo({ center: [req.lng, req.lat], zoom: 14.5, duration: 800 });
+        });
+
+        const marker = new maplibregl.Marker({ element: el })
+          .setLngLat([req.lng, req.lat])
+          .addTo(map.current);
+
+        markersRef.current[req.id] = marker;
+      }
+
+      // If matched, also ensure Volunteer Marker is added
+      const volId = `vol-${req.id}`;
+      if (isMatched) {
+        currentIds.add(volId);
+        const helperLng = req.match_info?.helper_lng || (req.lng + 0.003);
+        const helperLat = req.match_info?.helper_lat || (req.lat + 0.003);
+
+        if (!markersRef.current[volId]) {
+          const volEl = document.createElement('div');
+          volEl.style.width = '32px';
+          volEl.style.height = '32px';
+          volEl.style.borderRadius = '50%';
+          volEl.style.background = '#4338CA';
+          volEl.style.border = '2.5px solid #FFFFFF';
+          volEl.style.boxShadow = '0 4px 12px rgba(67,56,202,0.5)';
+          volEl.style.cursor = 'pointer';
+          volEl.style.display = 'flex';
+          volEl.style.alignItems = 'center';
+          volEl.style.justifyContent = 'center';
+
+          const innerDot = document.createElement('div');
+          innerDot.style.width = '10px';
+          innerDot.style.height = '10px';
+          innerDot.style.background = '#FFFFFF';
+          innerDot.style.borderRadius = '50%';
+          volEl.appendChild(innerDot);
+
+          volEl.addEventListener('click', () => {
+            setSelectedItem(req);
+            map.current.flyTo({ center: [helperLng, helperLat], zoom: 15, duration: 800 });
+          });
+
+          const volMarker = new maplibregl.Marker({ element: volEl })
+            .setLngLat([helperLng, helperLat])
+            .addTo(map.current);
+
+          markersRef.current[volId] = volMarker;
+        }
+      }
+    });
+
+    // Remove obsolete markers
+    Object.keys(markersRef.current).forEach((id) => {
+      if (!currentIds.has(id)) {
+        markersRef.current[id].remove();
+        delete markersRef.current[id];
+      }
+    });
+  }, [requests, activeFilter]);
+
+  // Handle 1-Tap Accept from Map
   const handleMapAccept = async (requestId) => {
     setActionLoading(true);
     try {
@@ -175,8 +380,7 @@ export default function AdminMap() {
       setRequests((prev) =>
         prev.map((r) => (r.id === requestId ? { ...r, ...updated } : r))
       );
-      setSelectedReq(updated);
-      setMapTarget([updated.lat, updated.lng]);
+      setSelectedItem(updated);
     } catch (err) {
       console.error('Map accept error:', err);
     } finally {
@@ -184,7 +388,7 @@ export default function AdminMap() {
     }
   };
 
-  // Handle Triage action directly from Map
+  // Handle Triage status update
   const handleMapTriage = async (requestId, adminStatus) => {
     setActionLoading(true);
     try {
@@ -192,37 +396,34 @@ export default function AdminMap() {
       setRequests((prev) =>
         prev.map((r) => (r.id === requestId ? { ...r, admin_status: updated.admin_status } : r))
       );
-      if (selectedReq?.id === requestId) {
-        setSelectedReq((prev) => ({ ...prev, admin_status: updated.admin_status }));
+      if (selectedItem?.id === requestId) {
+        setSelectedItem((prev) => ({ ...prev, admin_status: updated.admin_status }));
       }
     } catch (err) {
-      console.error('Map triage error:', err);
+      console.error('Triage error:', err);
     } finally {
       setActionLoading(false);
     }
   };
 
-  // Filter requests
-  const filteredRequests = requests.filter((r) => {
-    if (activeFilter === 'urgent') return r.urgency === 'high';
-    if (activeFilter === 'unassigned') return r.status === 'requested';
-    if (activeFilter === 'matched') return r.status === 'matched' || r.status === 'en_route' || r.status === 'in_progress';
-    return true;
-  });
-
-  const defaultCenter = requests.length > 0
-    ? [requests[0].lat, requests[0].lng]
-    : [37.7749, -122.4194];
+  // Fly map to specific request from sidebar
+  const flyToRequest = (req) => {
+    setSelectedItem(req);
+    if (map.current) {
+      map.current.flyTo({
+        center: [req.lng, req.lat],
+        zoom: 15,
+        duration: 900,
+      });
+    }
+  };
 
   return (
     <div className="py-2 sm:py-6">
       {/* Real-time Incoming Emergency Toast */}
       {incomingAlert && (
         <div 
-          onClick={() => {
-            setSelectedReq(incomingAlert);
-            setMapTarget([incomingAlert.lat, incomingAlert.lng]);
-          }}
+          onClick={() => flyToRequest(incomingAlert)}
           className="mb-4 p-4 rounded-2xl bg-[#DC2626] text-white shadow-xl flex items-center justify-between cursor-pointer hover:bg-[#B91C1C] transition transform animate-bounce"
         >
           <div className="flex items-center space-x-3">
@@ -234,45 +435,62 @@ export default function AdminMap() {
                 <span className="text-xs uppercase font-black tracking-wider bg-white/20 px-2 py-0.5 rounded">
                   🚨 New Incoming SOS: {incomingAlert.category}
                 </span>
-                <span className="text-xs font-mono">{incomingAlert.lat?.toFixed(4)}, {incomingAlert.lng?.toFixed(4)}</span>
+                <span className="text-xs font-mono">{incomingAlert.lat?.toFixed(4)}, {incomingAlert.lng?.toFixed(4)} (Mumbai)</span>
               </div>
               <p className="text-xs font-medium text-white/90 mt-0.5">
-                {incomingAlert.details || '1-Tap Rapid SOS Received. Click to fly to pin.'}
+                {incomingAlert.details || '1-Tap Rapid SOS Received. Click to fly to pin on MapLibre.'}
               </p>
             </div>
           </div>
           <span className="text-xs font-bold underline px-3 py-1 bg-white/10 rounded-lg">
-            Inspect on Map &rarr;
+            Inspect &rarr;
           </span>
+        </div>
+      )}
+
+      {/* User Geolocation Hazard Alert (NDMA Sachet Point-in-Polygon feature) */}
+      {userGeoWarning && (
+        <div className="mb-4 p-4 rounded-2xl bg-[#FEF3C7] border-2 border-[#D97706] text-[#92400E] shadow-md flex items-start space-x-3">
+          <AlertTriangle className="w-5 h-5 text-[#D97706] flex-shrink-0 mt-0.5" />
+          <div className="text-xs">
+            <div className="font-extrabold text-sm text-[#B45309]">
+              ⚠️ NDMA Sachet Geo-Alert: You are inside an active warning polygon!
+            </div>
+            <div className="font-medium mt-0.5">
+              <strong>{userGeoWarning.headline}</strong> in <strong>{userGeoWarning.district}</strong>.
+            </div>
+          </div>
         </div>
       )}
 
       {/* Header bar */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
         <div>
-          <h1 className="text-xl sm:text-2xl font-black text-[#0F172A] tracking-tight flex items-center space-x-2">
+          <div className="flex items-center space-x-2">
+            <span className="px-2 py-0.5 rounded text-[10px] font-black uppercase bg-[#0F172A] text-white tracking-widest">
+              NDMA Sachet Architecture
+            </span>
+            <span className="text-xs font-mono text-[#0284C7] font-bold">
+              MapLibre GL JS &bull; Mumbai Regional Polygons
+            </span>
+          </div>
+          <h1 className="text-xl sm:text-2xl font-black text-[#0F172A] tracking-tight mt-1 flex items-center space-x-2">
             <Radio className="w-5 h-5 text-[#DC2626] animate-pulse" />
-            <span>GIS Live Map & Dispatch Control</span>
+            <span>Crisis GIS & Common Alerting Protocol (CAP) Map</span>
           </h1>
-          <p className="text-xs text-[#64748B] font-medium mt-0.5">
-            Real-time interactive spatial map. Click any pin to inspect details, dispatch responders, or triage.
-          </p>
         </div>
 
-        {/* Filter Pills & Live Stats */}
+        {/* Filter Controls */}
         <div className="flex flex-wrap items-center gap-2">
-          {/* Active Pins Count */}
-          <span className="flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-white border border-[#CBD5E1] text-[#0F172A] text-xs font-bold shadow-sm">
-            <span className="w-2.5 h-2.5 rounded-full bg-[#DC2626] inline-block animate-ping-slow" />
-            <span>Live Pins: <strong>{requests.length}</strong></span>
+          <span className="px-3 py-1.5 rounded-xl bg-white border border-[#CBD5E1] text-[#0F172A] text-xs font-bold shadow-sm">
+            Active SOS Pins: <strong>{requests.length}</strong>
           </span>
 
-          {/* Filter Pills */}
           {[
-            { id: 'all', label: 'All Pins' },
+            { id: 'all', label: 'All Layers' },
+            { id: 'blood', label: 'Blood Aid' },
             { id: 'urgent', label: 'Critical Only' },
             { id: 'unassigned', label: 'Unassigned Queue' },
-            { id: 'matched', label: 'Active Dispatches' },
           ].map((f) => (
             <button
               key={f.id}
@@ -288,326 +506,197 @@ export default function AdminMap() {
           ))}
 
           <button
-            onClick={loadMapData}
-            title="Reload Map Data"
-            className="p-2 rounded-xl bg-white hover:bg-[#F1F5F9] border border-[#CBD5E1] text-[#475569] hover:text-[#0F172A] transition shadow-sm"
+            onClick={loadData}
+            className="p-2 rounded-xl bg-white hover:bg-[#F1F5F9] border border-[#CBD5E1] text-[#475569] transition shadow-sm"
           >
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
           </button>
         </div>
       </div>
 
-      {/* Main Map + Inspector Drawer Layout */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      {/* Main Layout: MapLibre Map (Left 7 Cols) + Synced Live Feed & Inspector (Right 5 Cols) */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
         
-        {/* Left: 2 Columns Interactive Leaflet Map */}
-        <div className="lg:col-span-2 w-full h-[620px] rounded-2xl overflow-hidden border border-[#CBD5E1] shadow-md relative bg-white">
-          <MapContainer
-            center={defaultCenter}
-            zoom={14}
-            scrollWheelZoom={true}
-            style={{ height: '100%', width: '100%' }}
-          >
-            <TileLayer
-              attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-            />
+        {/* Left: MapLibre GL JS Vector Map */}
+        <div className="lg:col-span-7 bg-white rounded-2xl border border-[#CBD5E1] p-2 shadow-md relative">
+          <div
+            ref={mapContainer}
+            className="w-full h-[620px] rounded-xl overflow-hidden relative"
+            style={{ width: '100%', height: '620px' }}
+          />
 
-            {mapTarget && <MapCenterController center={mapTarget} zoom={15} />}
+          {/* Map Severity Legend (NDMA Sachet standard) */}
+          <div className="absolute bottom-5 left-5 right-5 p-3 rounded-xl bg-white/95 backdrop-blur-md border border-[#CBD5E1] shadow-lg flex flex-wrap items-center justify-between gap-3 text-xs z-10">
+            <div className="flex items-center space-x-3 font-bold text-[#0F172A]">
+              <span>CAP Severity:</span>
+              <span className="flex items-center space-x-1.5">
+                <span className="w-3 h-3 rounded bg-[#DC2626] inline-block border border-black/10" />
+                <span className="text-[#991B1B]">Extreme</span>
+              </span>
+              <span className="flex items-center space-x-1.5">
+                <span className="w-3 h-3 rounded bg-[#EA580C] inline-block border border-black/10" />
+                <span className="text-[#C2410C]">Severe</span>
+              </span>
+              <span className="flex items-center space-x-1.5">
+                <span className="w-3 h-3 rounded bg-[#EAB308] inline-block border border-black/10" />
+                <span className="text-[#A16207]">Moderate</span>
+              </span>
+            </div>
 
-            {/* Confirmed Active Disaster Zones */}
-            {confirmedZones.map((zone) => (
-              <Circle
-                key={zone.id}
-                center={[zone.center_lat, zone.center_lng]}
-                radius={450}
-                pathOptions={{
-                  color: '#DC2626',
-                  fillColor: '#DC2626',
-                  fillOpacity: 0.28,
-                  weight: 3,
-                }}
-              >
-                <Popup>
-                  <div className="p-1 text-xs space-y-1">
-                    <div className="font-extrabold text-[#DC2626] uppercase tracking-wider flex items-center space-x-1">
-                      <ShieldAlert className="w-3.5 h-3.5" />
-                      <span>Confirmed Crisis Zone</span>
-                    </div>
-                    <div className="text-[#0F172A] font-bold">
-                      Hazard: <span className="uppercase text-[#DC2626]">{zone.category}</span>
-                    </div>
-                    <div className="text-[#64748B] text-[11px]">
-                      {zone.ml_status || 'Multi-source cluster confirmed'}
-                    </div>
-                  </div>
-                </Popup>
-              </Circle>
-            ))}
-
-            {/* Filtered Emergency Request Pins */}
-            {filteredRequests.map((req) => {
-              const isSelected = selectedReq?.id === req.id;
-              const isMatched = req.status === 'matched' || req.status === 'en_route' || req.status === 'in_progress';
-              const helperLat = req.match_info?.helper_lat || (req.lat + 0.003);
-              const helperLng = req.match_info?.helper_lng || (req.lng + 0.003);
-
-              return (
-                <React.Fragment key={req.id}>
-                  {/* Caller Distress Pin */}
-                  <Marker
-                    position={[req.lat, req.lng]}
-                    icon={createCrisisPinIcon(req.category, req.urgency, isSelected)}
-                    eventHandlers={{
-                      click: () => {
-                        setSelectedReq(req);
-                        setMapTarget([req.lat, req.lng]);
-                      },
-                    }}
-                  >
-                    <Popup>
-                      <div className="p-1 text-xs space-y-2 min-w-[220px]">
-                        <div className="flex items-center justify-between gap-2 border-b border-[#E2E8F0] pb-1.5">
-                          <span className="font-black uppercase text-[#991B1B]">
-                            {req.category}
-                          </span>
-                          <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase ${
-                            req.urgency === 'high' ? 'bg-[#DC2626] text-white' : 'bg-[#F1F5F9] text-[#475569]'
-                          }`}>
-                            {req.urgency}
-                          </span>
-                        </div>
-
-                        <p className="text-[#0F172A] font-bold leading-snug">
-                          {req.details || '1-Tap Rapid Emergency SOS'}
-                        </p>
-
-                        <div className="text-[11px] text-[#64748B] space-y-0.5 font-medium">
-                          <div>Status: <strong className="text-[#0F172A] capitalize">{req.status}</strong></div>
-                          <div>Admin: <strong className="text-[#0F172A] capitalize">{req.admin_status}</strong></div>
-                          {req.requester_phone && <div>Phone: {req.requester_phone}</div>}
-                        </div>
-
-                        {/* Interactive Action inside popup */}
-                        <div className="pt-2 flex gap-1.5">
-                          {req.status === 'requested' && (
-                            <button
-                              onClick={() => handleMapAccept(req.id)}
-                              className="w-full py-1.5 px-2.5 rounded-lg bg-[#16A34A] hover:bg-[#15803D] text-white font-bold text-[11px] flex items-center justify-center space-x-1 shadow-sm"
-                            >
-                              <Check className="w-3.5 h-3.5" />
-                              <span>Dispatch Responder</span>
-                            </button>
-                          )}
-                          <button
-                            onClick={() => setSelectedReq(req)}
-                            className="w-full py-1.5 px-2.5 rounded-lg bg-[#0F172A] text-white font-bold text-[11px] flex items-center justify-center space-x-1"
-                          >
-                            <Eye className="w-3.5 h-3.5" />
-                            <span>Inspect & Triage</span>
-                          </button>
-                        </div>
-                      </div>
-                    </Popup>
-                  </Marker>
-
-                  {/* If Matched, plot Volunteer Pin + connecting dispatch line */}
-                  {isMatched && (
-                    <>
-                      <Marker
-                        position={[helperLat, helperLng]}
-                        icon={createVolunteerPinIcon()}
-                        eventHandlers={{
-                          click: () => {
-                            setSelectedReq(req);
-                            setMapTarget([helperLat, helperLng]);
-                          },
-                        }}
-                      >
-                        <Popup>
-                          <div className="p-1 text-xs space-y-1">
-                            <div className="font-extrabold text-[#4338CA] uppercase tracking-wider flex items-center space-x-1">
-                              <Users className="w-3.5 h-3.5" />
-                              <span>Matched Responder Unit</span>
-                            </div>
-                            <div className="text-[#0F172A] font-bold">
-                              {req.match_info?.helper_name || 'Dr. Sarah Lin (Red Cross)'}
-                            </div>
-                            <div className="text-[#64748B] text-[11px]">
-                              Navigating to {req.category} incident
-                            </div>
-                          </div>
-                        </Popup>
-                      </Marker>
-
-                      {/* Route Polyline */}
-                      <Polyline
-                        positions={[
-                          [helperLat, helperLng],
-                          [req.lat, req.lng],
-                        ]}
-                        pathOptions={{
-                          color: '#4338CA',
-                          weight: 3,
-                          dashArray: '6, 8',
-                          opacity: 0.8,
-                        }}
-                      />
-                    </>
-                  )}
-                </React.Fragment>
-              );
-            })}
-          </MapContainer>
+            <div className="flex items-center space-x-3 text-[11px] text-[#475569] font-semibold">
+              <span className="flex items-center space-x-1">
+                <span className="w-3 h-3 rounded-full bg-[#DC2626] inline-block" />
+                <span>Distress SOS</span>
+              </span>
+              <span className="flex items-center space-x-1">
+                <span className="w-3 h-3 rounded-full bg-[#4338CA] inline-block" />
+                <span className="text-[#4338CA] font-bold">Volunteer Unit</span>
+              </span>
+            </div>
+          </div>
         </div>
 
-        {/* Right: 1 Column Live Interactive Inspector Drawer */}
-        <div className="bg-white border border-[#CBD5E1] rounded-2xl p-5 shadow-md flex flex-col justify-between h-[620px]">
+        {/* Right: Synced Two-Way Feed & Inspector Drawer (Sachet Architecture) */}
+        <div className="lg:col-span-5 bg-white border border-[#CBD5E1] rounded-2xl p-5 shadow-md flex flex-col justify-between h-[636px]">
           <div>
             <div className="flex items-center justify-between border-b border-[#E2E8F0] pb-3 mb-4">
-              <h3 className="text-xs font-black uppercase tracking-wider text-[#0F172A] flex items-center space-x-1.5">
-                <LocateFixed className="w-4 h-4 text-[#2563EB]" />
-                <span>Map Incident Inspector</span>
+              <h3 className="text-xs font-black uppercase tracking-wider text-[#0F172A] flex items-center space-x-2">
+                <Layers className="w-4 h-4 text-[#2563EB]" />
+                <span>Live Feed & Triage (Synced with Viewport)</span>
               </h3>
-              <span className="text-[11px] font-mono text-[#64748B]">
-                {filteredRequests.length} pins active
+              <span className="text-xs font-mono text-[#64748B]">
+                Newest Up ({requests.length})
               </span>
             </div>
 
-            {selectedReq ? (
-              <div className="space-y-4 overflow-y-auto max-h-[400px] pr-1">
-                {/* Header Category & Urgency */}
-                <div className="p-4 rounded-xl bg-[#F8FAFC] border border-[#CBD5E1] space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-black uppercase tracking-wide bg-[#0F172A] text-white px-2.5 py-1 rounded-lg">
-                      {selectedReq.category}
-                    </span>
-                    <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase ${
-                      selectedReq.urgency === 'high' ? 'bg-[#DC2626] text-white' : 'bg-[#E2E8F0] text-[#475569]'
-                    }`}>
-                      {selectedReq.urgency === 'high' ? 'High Urgency' : 'Standard'}
-                    </span>
-                  </div>
-
-                  <h4 className="text-sm font-extrabold text-[#0F172A] leading-snug">
-                    {selectedReq.details || '1-Tap Emergency SOS (No extra note attached)'}
-                  </h4>
-
-                  <div className="text-xs text-[#64748B] space-y-1 font-medium pt-1 border-t border-[#E2E8F0]">
-                    <div><strong>Requester:</strong> {selectedReq.requester_name || 'Anonymous Citizen'}</div>
-                    {selectedReq.requester_phone && (
-                      <div className="flex items-center space-x-1 text-[#2563EB]">
-                        <Phone className="w-3.5 h-3.5" />
-                        <span>{selectedReq.requester_phone}</span>
-                      </div>
-                    )}
-                    <div className="font-mono text-[11px]">
-                      Coords: {selectedReq.lat?.toFixed(5)}, {selectedReq.lng?.toFixed(5)}
-                    </div>
-                  </div>
-
-                  <DuplicateBadge linkedCount={selectedReq.linked_count} />
+            {/* Selected Item Detail Card */}
+            {selectedItem ? (
+              <div className="p-4 rounded-xl bg-[#F8FAFC] border border-[#CBD5E1] mb-4 space-y-2.5 shadow-sm animate-pulse-subtle">
+                <div className="flex items-center justify-between">
+                  <span className="px-2 py-0.5 rounded text-[11px] font-black uppercase bg-[#0F172A] text-white">
+                    {selectedItem.category || (selectedItem.isSachetAlert ? 'CAP Alert' : 'Emergency')}
+                  </span>
+                  <button
+                    onClick={() => setSelectedItem(null)}
+                    className="text-xs text-[#64748B] hover:text-[#0F172A] font-bold"
+                  >
+                    Close Inspector ✕
+                  </button>
                 </div>
 
-                {/* Dispatch Status & Volunteer Info */}
-                <div className="p-3.5 rounded-xl border border-[#E2E8F0] text-xs space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="font-bold text-[#64748B]">Dispatch Status:</span>
-                    <span className="font-extrabold uppercase text-[#0F172A] px-2 py-0.5 rounded bg-[#F1F5F9] border border-[#CBD5E1]">
-                      {selectedReq.status}
-                    </span>
-                  </div>
+                <h4 className="text-sm font-extrabold text-[#0F172A] leading-snug">
+                  {selectedItem.headline || selectedItem.details || 'Emergency Distress Signal'}
+                </h4>
 
-                  {selectedReq.match_info && (
-                    <div className="p-2.5 rounded-lg bg-[#E0F2FE] border border-[#BAE6FD] text-[#0284C7] space-y-1">
-                      <div className="font-extrabold flex items-center space-x-1">
-                        <Users className="w-3.5 h-3.5" />
-                        <span>{selectedReq.match_info.helper_name}</span>
-                      </div>
-                      <div className="text-[11px] text-[#075985]">
-                        Responder is En Route with GPS route tracking active.
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {/* Direct Map Interactive Action Controls */}
-                <div className="space-y-2 pt-1">
-                  <label className="text-[11px] font-black uppercase tracking-wider text-[#64748B] block">
-                    Map Operations & Actions:
-                  </label>
-
-                  {/* Accept Dispatch Action */}
-                  {selectedReq.status === 'requested' && (
-                    <button
-                      disabled={actionLoading}
-                      onClick={() => handleMapAccept(selectedReq.id)}
-                      className="w-full py-2.5 px-4 rounded-xl bg-[#16A34A] hover:bg-[#15803D] text-white font-extrabold text-xs shadow-md transition flex items-center justify-center space-x-2"
-                    >
-                      <Truck className="w-4 h-4" />
-                      <span>{actionLoading ? 'Dispatching...' : 'Accept & Dispatch Volunteer Unit'}</span>
-                    </button>
-                  )}
-
-                  {/* Admin Triage Actions */}
-                  <div className="grid grid-cols-3 gap-2">
-                    <button
-                      disabled={actionLoading || selectedReq.admin_status === 'approved'}
-                      onClick={() => handleMapTriage(selectedReq.id, 'approved')}
-                      className="py-2 px-2 rounded-xl bg-[#DCFCE7] hover:bg-[#BBF7D0] text-[#15803D] border border-[#BBF7D0] font-extrabold text-[11px] flex items-center justify-center space-x-1 disabled:opacity-40"
-                    >
-                      <Check className="w-3.5 h-3.5" />
-                      <span>Approve</span>
-                    </button>
-
-                    <button
-                      disabled={actionLoading || selectedReq.admin_status === 'flagged'}
-                      onClick={() => handleMapTriage(selectedReq.id, 'flagged')}
-                      className="py-2 px-2 rounded-xl bg-[#FEF3C7] hover:bg-[#FDE68A] text-[#B45309] border border-[#FDE68A] font-extrabold text-[11px] flex items-center justify-center space-x-1 disabled:opacity-40"
-                    >
-                      <Flag className="w-3.5 h-3.5" />
-                      <span>Flag</span>
-                    </button>
-
-                    <button
-                      disabled={actionLoading || selectedReq.admin_status === 'rejected'}
-                      onClick={() => handleMapTriage(selectedReq.id, 'rejected')}
-                      className="py-2 px-2 rounded-xl bg-[#FEE2E2] hover:bg-[#FECACA] text-[#B91C1C] border border-[#FECACA] font-extrabold text-[11px] flex items-center justify-center space-x-1 disabled:opacity-40"
-                    >
-                      <X className="w-3.5 h-3.5" />
-                      <span>Reject</span>
-                    </button>
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <div className="h-full flex flex-col items-center justify-center text-center p-6 text-[#64748B]">
-                <MapPin className="w-10 h-10 mb-3 text-[#CBD5E1]" />
-                <h4 className="font-extrabold text-[#0F172A] text-sm">Select A Pin On The Map</h4>
-                <p className="text-xs text-[#64748B] mt-1 font-medium">
-                  Click on any emergency marker to view caller notes, dispatch volunteer units, or triage approvals in real time.
+                <p className="text-xs text-[#475569] font-medium leading-relaxed">
+                  {selectedItem.description || (selectedItem.requester_name ? `Contact: ${selectedItem.requester_name} (${selectedItem.requester_phone || 'No phone'})` : '1-Tap Rapid SOS Received.')}
                 </p>
+
+                {selectedItem.lat && (
+                  <div className="text-[11px] font-mono text-[#64748B] pt-1 border-t border-[#E2E8F0]">
+                    Location: Mumbai ({selectedItem.lat?.toFixed(4)}, {selectedItem.lng?.toFixed(4)})
+                  </div>
+                )}
+
+                {/* 1-Tap Map Actions */}
+                {!selectedItem.isSachetAlert && selectedItem.id && (
+                  <div className="pt-2 space-y-2">
+                    {selectedItem.status === 'requested' && (
+                      <button
+                        disabled={actionLoading}
+                        onClick={() => handleMapAccept(selectedItem.id)}
+                        className="w-full py-2 px-3 rounded-xl bg-[#16A34A] hover:bg-[#15803D] text-white font-extrabold text-xs shadow-md transition flex items-center justify-center space-x-1.5"
+                      >
+                        <Truck className="w-4 h-4" />
+                        <span>Accept & Dispatch Responder Unit</span>
+                      </button>
+                    )}
+
+                    <div className="grid grid-cols-3 gap-2">
+                      <button
+                        disabled={actionLoading}
+                        onClick={() => handleMapTriage(selectedItem.id, 'approved')}
+                        className="py-1.5 px-2 rounded-lg bg-[#DCFCE7] text-[#15803D] font-bold text-[11px] border border-[#BBF7D0]"
+                      >
+                        Approve
+                      </button>
+                      <button
+                        disabled={actionLoading}
+                        onClick={() => handleMapTriage(selectedItem.id, 'flagged')}
+                        className="py-1.5 px-2 rounded-lg bg-[#FEF3C7] text-[#B45309] font-bold text-[11px] border border-[#FDE68A]"
+                      >
+                        Flag
+                      </button>
+                      <button
+                        disabled={actionLoading}
+                        onClick={() => handleMapTriage(selectedItem.id, 'rejected')}
+                        className="py-1.5 px-2 rounded-lg bg-[#FEE2E2] text-[#B91C1C] font-bold text-[11px] border border-[#FECACA]"
+                      >
+                        Reject
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
-            )}
+            ) : null}
+
+            {/* Scrollable Live List (Newest Up!) */}
+            <div className="space-y-2.5 overflow-y-auto max-h-[380px] pr-1">
+              {requests.map((req) => {
+                const isSelected = selectedItem?.id === req.id;
+                const isHigh = req.urgency === 'high';
+
+                return (
+                  <div
+                    key={req.id}
+                    onClick={() => flyToRequest(req)}
+                    className={`p-3.5 rounded-xl border transition-all cursor-pointer ${
+                      isSelected
+                        ? 'bg-[#E0F2FE] border-[#0284C7] ring-2 ring-[#0284C7]/20 shadow-sm'
+                        : isHigh
+                        ? 'bg-gradient-to-r from-[#FEF2F2] to-white border-[#FECACA] hover:border-[#DC2626]'
+                        : 'bg-white border-[#E2E8F0] hover:border-[#CBD5E1] hover:bg-[#F8FAFC]'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-2 mb-1">
+                      <div className="flex items-center space-x-2">
+                        <span className="text-xs font-black uppercase text-[#0F172A]">
+                          {req.category}
+                        </span>
+                        {isHigh && (
+                          <span className="text-[10px] font-black uppercase px-1.5 py-0.2 rounded bg-[#DC2626] text-white">
+                            High Urgency
+                          </span>
+                        )}
+                        <span className="text-[10px] font-mono text-[#64748B] capitalize">
+                          [{req.status}]
+                        </span>
+                      </div>
+                      <span className="text-[10px] text-[#94A3B8]">
+                        {req.created_at ? new Date(req.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Now'}
+                      </span>
+                    </div>
+
+                    <p className="text-xs font-bold text-[#0F172A] line-clamp-1">
+                      {req.details || '1-Tap Emergency SOS Received'}
+                    </p>
+
+                    <div className="flex items-center justify-between text-[11px] text-[#64748B] mt-1 font-medium">
+                      <span>{req.requester_name || 'Citizen'}</span>
+                      <span className="text-[#2563EB] font-bold flex items-center space-x-1">
+                        <MapPin className="w-3 h-3" />
+                        <span>Fly to Pin &rarr;</span>
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
 
-          {/* Bottom Quick Pins Switcher */}
-          <div className="border-t border-[#E2E8F0] pt-3 flex items-center justify-between text-xs text-[#64748B]">
-            <span className="font-bold">Layer Legend:</span>
-            <div className="flex items-center space-x-3">
-              <span className="flex items-center space-x-1">
-                <span className="w-2.5 h-2.5 rounded-full bg-[#DC2626] inline-block" />
-                <span>Distress</span>
-              </span>
-              <span className="flex items-center space-x-1">
-                <span className="w-2.5 h-2.5 rounded-full bg-[#4338CA] inline-block" />
-                <span className="text-[#4338CA] font-bold">Responder</span>
-              </span>
-              <span className="flex items-center space-x-1">
-                <span className="w-2.5 h-2.5 rounded-full bg-[#D97706] inline-block" />
-                <span>Cluster</span>
-              </span>
-            </div>
+          <div className="border-t border-[#E2E8F0] pt-3 text-xs text-[#64748B] flex items-center justify-between">
+            <span className="font-bold text-[#0F172A]">MapLibre Vector Engine</span>
+            <span>Click any polygon or pin to inspect</span>
           </div>
         </div>
 

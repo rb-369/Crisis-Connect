@@ -1,7 +1,7 @@
 from typing import Optional, List, Dict, Any
 from fastapi import APIRouter
 from pydantic import BaseModel
-from database import db_create_zone_report, db_list_confirmed_zones
+from database import db_create_zone_report, db_list_confirmed_zones, MUMBAI_SACHET_ALERTS
 from websocket_manager import ws_manager
 
 router = APIRouter(tags=["Zones"])
@@ -17,8 +17,7 @@ class ZoneReportCreate(BaseModel):
 @router.post("/zone-reports", status_code=201)
 async def report_zone(payload: ZoneReportCreate):
     """
-    Step 6: Public Crisis Zone Pin-Drop.
-    Anyone can report hazard sightings.
+    Public Crisis Zone Pin-Drop.
     If 3+ reports cluster within 500m, creates a confirmed zone and broadcasts 'zone_confirmed'.
     """
     result = await db_create_zone_report(payload.model_dump())
@@ -27,6 +26,7 @@ async def report_zone(payload: ZoneReportCreate):
     if confirmed:
         await ws_manager.broadcast("admin", "zone_confirmed", confirmed)
         await ws_manager.broadcast("zones", "zone_confirmed", confirmed)
+        await ws_manager.broadcast_all("zone_confirmed", confirmed)
 
     return result
 
@@ -34,7 +34,17 @@ async def report_zone(payload: ZoneReportCreate):
 @router.get("/confirmed-zones")
 async def get_confirmed_zones():
     """
-    Step 5: Fetch confirmed crisis zones for the Admin Map overlay.
+    Fetch confirmed crisis zones for the Map overlay.
     """
     zones = await db_list_confirmed_zones()
     return zones
+
+
+@router.get("/sachet-alerts")
+async def get_sachet_alerts():
+    """
+    NDMA Sachet Replication Endpoint:
+    Returns standard CAP GeoJSON FeatureCollection with severity color coding,
+    district properties, and multi-polygon geometries for MapLibre GL JS vector rendering.
+    """
+    return MUMBAI_SACHET_ALERTS

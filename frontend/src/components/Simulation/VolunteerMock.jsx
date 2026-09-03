@@ -198,7 +198,7 @@ export default function VolunteerMock() {
 
   const defaultCenter = requests.length > 0
     ? [requests[0].lat, requests[0].lng]
-    : [37.7749, -122.4194];
+    : [19.0760, 72.8777]; // Mumbai, India
 
   return (
     <div className="max-w-6xl mx-auto py-2 sm:py-6">

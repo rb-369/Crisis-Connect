@@ -16,6 +16,93 @@ if USE_LIVE_SUPABASE:
         supabase_client = None
 
 
+# Sachet CAP Standard Alerts FeatureCollection for Mumbai & Surrounding Districts
+MUMBAI_SACHET_ALERTS = {
+    "type": "FeatureCollection",
+    "features": [
+        {
+            "type": "Feature",
+            "id": "sachet-mum-001",
+            "properties": {
+                "headline": "Mithi River Basin Flash Flood & Overflow Warning",
+                "category": "Flood",
+                "severity": "Extreme", # Red
+                "district": "Mumbai Suburban (Kurla - Kalina)",
+                "state": "Maharashtra",
+                "description": "Brimstowd pumping gates saturated. Mithi river level 3.8m exceeding danger mark. Immediate evacuation along Kranti Nagar and Kurla West.",
+                "effective": datetime.now(timezone.utc).isoformat(),
+                "expires": "2026-09-04T18:00:00Z"
+            },
+            "geometry": {
+                "type": "Polygon",
+                "coordinates": [
+                    [
+                        [72.8650, 19.0600],
+                        [72.8900, 19.0620],
+                        [72.8950, 19.0800],
+                        [72.8700, 19.0850],
+                        [72.8600, 19.0720],
+                        [72.8650, 19.0600]
+                    ]
+                ]
+            }
+        },
+        {
+            "type": "Feature",
+            "id": "sachet-mum-002",
+            "properties": {
+                "headline": "Mahim Bay & Coastal Tidal Surge Advisory",
+                "category": "Cyclone / Surge",
+                "severity": "Severe", # Orange
+                "district": "Mumbai City (Bandra - Dadar Coast)",
+                "state": "Maharashtra",
+                "description": "High tide of 4.65m combined with squally winds 55-65 kmph. Avoid promenade and low-lying coastal roads.",
+                "effective": datetime.now(timezone.utc).isoformat(),
+                "expires": "2026-09-04T12:00:00Z"
+            },
+            "geometry": {
+                "type": "Polygon",
+                "coordinates": [
+                    [
+                        [72.8150, 19.0200],
+                        [72.8400, 19.0300],
+                        [72.8450, 19.0650],
+                        [72.8250, 19.0600],
+                        [72.8150, 19.0200]
+                    ]
+                ]
+            }
+        },
+        {
+            "type": "Feature",
+            "id": "sachet-mum-003",
+            "properties": {
+                "headline": "Hindmata - Sion Waterlogging & Transit Disruption",
+                "category": "Heavy Rain",
+                "severity": "Moderate", # Yellow
+                "district": "Mumbai Central (Sion - Matunga - Parel)",
+                "state": "Maharashtra",
+                "description": "Continuous precipitation leading to 1.5ft water accumulation. BEST buses diverted via Dr. B.A. Road flyover.",
+                "effective": datetime.now(timezone.utc).isoformat(),
+                "expires": "2026-09-04T08:00:00Z"
+            },
+            "geometry": {
+                "type": "Polygon",
+                "coordinates": [
+                    [
+                        [72.8400, 19.0050],
+                        [72.8650, 19.0150],
+                        [72.8700, 19.0450],
+                        [72.8450, 19.0400],
+                        [72.8400, 19.0050]
+                    ]
+                ]
+            }
+        }
+    ]
+}
+
+
 # In-Memory store for fast fallback & local instant testing
 class MemoryDB:
     def __init__(self):
@@ -27,48 +114,67 @@ class MemoryDB:
         self.confirmed_zones: List[Dict[str, Any]] = []
 
     def seed_default_data(self):
-        """Populate realistic demo crisis data"""
+        """Populate realistic demo crisis data in Mumbai, Maharashtra, India"""
         if self.requests:
             return  # already seeded
 
-        # Helper demo
+        # Helper demo (Mumbai Emergency Unit)
         helper_id = "h-1001-vol"
         self.helpers[helper_id] = {
             "id": helper_id,
-            "name": "Dr. Sarah Lin (Red Cross)",
-            "phone": "+1-555-0192",
+            "name": "Dr. Rohit Deshmukh (Red Cross Mumbai)",
+            "phone": "+91 98201 55019",
             "role": "volunteer",
-            "org_name": "Red Cross Emergency Unit",
+            "org_name": "Indian Red Cross Emergency Response Mumbai",
             "verified": True,
             "available": True,
-            "lat": 37.7749,
-            "lng": -122.4194,
+            "lat": 19.0178,
+            "lng": 72.8478, # Dadar TT
         }
 
-        # Confirmed Hazard Zone
+        # Confirmed Hazard Zone (Kurla-Mithi River Basin Flood Zone)
         zone_id = str(uuid.uuid4())
         self.confirmed_zones.append({
             "id": zone_id,
             "category": "rescue",
-            "center_lat": 37.7780,
-            "center_lng": -122.4150,
+            "center_lat": 19.0728,
+            "center_lng": 72.8785, # Kurla West
             "ml_status": "confirmed_cluster_8_reports",
             "confirmed_at": datetime.now(timezone.utc).isoformat(),
         })
 
-        # Demo requests with varied categories and urgencies
+        # Demo requests with Mumbai coordinates & landmarks
         demo_reqs = [
+            {
+                "id": str(uuid.uuid4()),
+                "category": "blood",
+                "urgency": "high",
+                "status": "requested",
+                "lat": 19.0178,
+                "lng": 72.8478,
+                "requester_device_id": "demo-device-mum-01",
+                "requester_name": "KEM Hospital Blood Bank Liaison",
+                "requester_phone": "022-2410-7000",
+                "details": "CRITICAL: 4 units O-Negative plasma required for emergency surgery patient, road flooded near Parel.",
+                "photo_url": None,
+                "admin_status": "approved",
+                "zone_confirmed": True,
+                "ml_status": "high_priority",
+                "linked_request_id": None,
+                "created_at": datetime.now(timezone.utc).isoformat(),
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            },
             {
                 "id": str(uuid.uuid4()),
                 "category": "oxygen",
                 "urgency": "high",
                 "status": "requested",
-                "lat": 37.7812,
-                "lng": -122.4180,
-                "requester_device_id": "demo-device-001",
-                "requester_name": "Marcus Vance",
-                "requester_phone": "415-555-0143",
-                "details": "Elderly patient on 5L concentrator, power generator failed 20m ago. Urgent cylinder needed.",
+                "lat": 19.0390,
+                "lng": 72.8619,
+                "requester_device_id": "demo-device-mum-02",
+                "requester_name": "Ramesh Kulkarni",
+                "requester_phone": "98205 11043",
+                "details": "Sion West: Elderly patient on continuous oxygen, power transformer submerged. Need backup D-type cylinder.",
                 "photo_url": None,
                 "admin_status": "pending",
                 "zone_confirmed": True,
@@ -82,12 +188,12 @@ class MemoryDB:
                 "category": "rescue",
                 "urgency": "high",
                 "status": "requested",
-                "lat": 37.7790,
-                "lng": -122.4162,
-                "requester_device_id": "demo-device-002",
-                "requester_name": "Elena Rostova",
-                "requester_phone": "415-555-0188",
-                "details": "Ground floor submerged, 3 adults and 1 infant trapped on roof deck.",
+                "lat": 19.0688,
+                "lng": 72.8785,
+                "requester_device_id": "demo-device-mum-03",
+                "requester_name": "Sunita Patil",
+                "requester_phone": "98670 44188",
+                "details": "Kurla West, Bail Bazar: Ground floor tenement submerged up to chest level. 5 family members trapped on loft.",
                 "photo_url": None,
                 "admin_status": "approved",
                 "zone_confirmed": True,
@@ -98,34 +204,15 @@ class MemoryDB:
             },
             {
                 "id": str(uuid.uuid4()),
-                "category": "medicine",
-                "urgency": "normal",
-                "status": "requested",
-                "lat": 37.7720,
-                "lng": -122.4220,
-                "requester_device_id": "demo-device-003",
-                "requester_name": "David Cho",
-                "requester_phone": "415-555-0165",
-                "details": "Type 1 diabetic needing rapid-acting insulin pens (Humalog/Novolog).",
-                "photo_url": None,
-                "admin_status": "pending",
-                "zone_confirmed": False,
-                "ml_status": None,
-                "linked_request_id": None,
-                "created_at": datetime.now(timezone.utc).isoformat(),
-                "updated_at": datetime.now(timezone.utc).isoformat(),
-            },
-            {
-                "id": str(uuid.uuid4()),
                 "category": "food",
                 "urgency": "normal",
                 "status": "requested",
-                "lat": 37.7735,
-                "lng": -122.4110,
-                "requester_device_id": "demo-device-004",
-                "requester_name": "Community Shelter Unit 4",
-                "requester_phone": "415-555-0112",
-                "details": "Drinking water bottles and ready-to-eat rations for 25 displaced residents.",
+                "lat": 19.0434,
+                "lng": 72.8567,
+                "requester_device_id": "demo-device-mum-04",
+                "requester_name": "Dharavi Relief Center Unit 5",
+                "requester_phone": "98190 22112",
+                "details": "Safe drinking water cans and dry biscuits packets needed for 40 displaced residents sheltering at municipal school.",
                 "photo_url": None,
                 "admin_status": "approved",
                 "zone_confirmed": False,
@@ -134,30 +221,26 @@ class MemoryDB:
                 "created_at": datetime.now(timezone.utc).isoformat(),
                 "updated_at": datetime.now(timezone.utc).isoformat(),
             },
+            {
+                "id": str(uuid.uuid4()),
+                "category": "medicine",
+                "urgency": "normal",
+                "status": "requested",
+                "lat": 19.0596,
+                "lng": 72.8295,
+                "requester_device_id": "demo-device-mum-05",
+                "requester_name": "Anil Fernandes",
+                "requester_phone": "98210 77165",
+                "details": "Bandra West, Hill Road: Type 1 insulin pens and sterile saline kit needed for elderly resident.",
+                "photo_url": None,
+                "admin_status": "pending",
+                "zone_confirmed": False,
+                "ml_status": None,
+                "linked_request_id": None,
+                "created_at": datetime.now(timezone.utc).isoformat(),
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            },
         ]
-
-        # Add duplicate example: second food request nearby linked to the first
-        first_food_id = demo_reqs[3]["id"]
-        dup_req = {
-            "id": str(uuid.uuid4()),
-            "category": "food",
-            "urgency": "normal",
-            "status": "requested",
-            "lat": 37.7738,
-            "lng": -122.4115,
-            "requester_device_id": "demo-device-005",
-            "requester_name": "Neighbor Apt 2B",
-            "requester_phone": "415-555-0177",
-            "details": "Clean drinking water needed for 4 people.",
-            "photo_url": None,
-            "admin_status": "pending",
-            "zone_confirmed": False,
-            "ml_status": "duplicate_candidate",
-            "linked_request_id": first_food_id,
-            "created_at": datetime.now(timezone.utc).isoformat(),
-            "updated_at": datetime.now(timezone.utc).isoformat(),
-        }
-        demo_reqs.append(dup_req)
 
         for req in demo_reqs:
             self.requests[req["id"]] = req
@@ -182,11 +265,9 @@ def haversine_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> fl
 # Database Operations (Abstraction Layer)
 
 async def db_create_request(data: Dict[str, Any]) -> Dict[str, Any]:
-    # Auto-generate ID & timestamps if missing
     req_id = data.get("id") or str(uuid.uuid4())
     now_iso = datetime.now(timezone.utc).isoformat()
     
-    # Auto urgency high for oxygen / rescue
     category = data.get("category", "").lower()
     urgency = data.get("urgency", "normal")
     if category in ("oxygen", "rescue") and urgency != "high":
@@ -212,8 +293,8 @@ async def db_create_request(data: Dict[str, Any]) -> Dict[str, Any]:
         "category": category,
         "urgency": urgency,
         "status": data.get("status", "requested"),
-        "lat": float(data.get("lat", 0)),
-        "lng": float(data.get("lng", 0)),
+        "lat": float(data.get("lat", 19.0760)),
+        "lng": float(data.get("lng", 72.8777)),
         "requester_device_id": data.get("requester_device_id", "anon-device"),
         "requester_name": data.get("requester_name"),
         "requester_phone": data.get("requester_phone"),
@@ -242,32 +323,34 @@ async def db_create_request(data: Dict[str, Any]) -> Dict[str, Any]:
 
 
 async def db_list_requests(admin_status: Optional[str] = None) -> List[Dict[str, Any]]:
+    """
+    Returns requests sorted with newest first (created_at descending)
+    as requested by user.
+    """
+    items = []
     if supabase_client:
         try:
             q = supabase_client.table("requests").select("*")
             if admin_status:
                 q = q.eq("admin_status", admin_status)
             res = q.order("created_at", desc=True).execute()
-            if res.data is not None:
-                # Synchronize memory store
+            if res.data is not None and len(res.data) > 0:
                 for item in res.data:
                     mem_db.requests[item["id"]] = item
-                # Sort: urgency 'high' first, then created_at desc
-                return sorted(
-                    res.data,
-                    key=lambda r: (0 if r.get("urgency") == "high" else 1, r.get("created_at", "")),
-                )
+                items = res.data
         except Exception as e:
             print(f"[Supabase Query Warning]: {e}. Reading from local memory store.")
 
-    items = list(mem_db.requests.values())
-    if admin_status:
-        items = [r for r in items if r.get("admin_status") == admin_status]
+    if not items:
+        items = list(mem_db.requests.values())
+        if admin_status:
+            items = [r for r in items if r.get("admin_status") == admin_status]
 
-    # Calculate linked counts for display
+    # Sort: Newest requests FIRST (created_at desc)
     return sorted(
         items,
-        key=lambda r: (0 if r.get("urgency") == "high" else 1, r.get("created_at", "")),
+        key=lambda r: r.get("created_at", ""),
+        reverse=True
     )
 
 
@@ -344,8 +427,8 @@ async def db_create_zone_report(data: Dict[str, Any]) -> Dict[str, Any]:
     report = {
         "id": report_id,
         "category": data.get("category"),
-        "lat": float(data.get("lat", 0)),
-        "lng": float(data.get("lng", 0)),
+        "lat": float(data.get("lat", 19.0760)),
+        "lng": float(data.get("lng", 72.8777)),
         "device_id": data.get("device_id", "anon-reporter"),
         "reported_at": now_iso,
     }
@@ -393,7 +476,7 @@ async def db_list_confirmed_zones() -> List[Dict[str, Any]]:
     if supabase_client:
         try:
             res = supabase_client.table("confirmed_zones").select("*").execute()
-            if res.data is not None:
+            if res.data is not None and len(res.data) > 0:
                 return res.data
         except Exception:
             pass
@@ -401,7 +484,6 @@ async def db_list_confirmed_zones() -> List[Dict[str, Any]]:
 
 
 async def db_get_linked_count(request_id: str) -> int:
-    """Returns how many other requests are linked to this request or share this linked_request_id"""
     count = 0
     for r in mem_db.requests.values():
         if r.get("linked_request_id") == request_id or (

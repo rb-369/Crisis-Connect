@@ -24,7 +24,7 @@ const HAZARD_CATEGORIES = [
 
 export default function ZoneReportScreen({ onReportSubmitted }) {
   const [selectedCategory, setSelectedCategory] = useState(HAZARD_CATEGORIES[0].id);
-  const [coords, setCoords] = useState({ lat: 37.7780, lng: -122.4150 });
+  const [coords, setCoords] = useState({ lat: 19.0728, lng: 72.8785 }); // Kurla, Mumbai
   const [gpsStatus, setGpsStatus] = useState('detecting');
   const [submitting, setSubmitting] = useState(false);
   const [successResult, setSuccessResult] = useState(null);

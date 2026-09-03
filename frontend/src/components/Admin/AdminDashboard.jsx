@@ -27,7 +27,11 @@ export default function AdminDashboard({ onOpenMap }) {
     setLoading(true);
     try {
       const data = await api.getRequests(statusFilter || null);
-      setRequests(data);
+      // Always keep newest requests up (created_at desc)
+      const sorted = (data || []).sort(
+        (a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0)
+      );
+      setRequests(sorted);
     } catch (err) {
       console.error('Failed to load admin queue:', err);
     } finally {
@@ -42,11 +46,11 @@ export default function AdminDashboard({ onOpenMap }) {
       'admin',
       'all',
       (payload) => {
-        if (payload.event === 'new_request') {
+        if (payload.event === 'new_request' && payload.data) {
           setRequests((prev) => {
             if (prev.some((r) => r.id === payload.data.id)) return prev;
-            const updated = [payload.data, ...prev];
-            return updated.sort((a, b) => (a.urgency === 'high' ? -1 : 1));
+            // Prepend new request immediately to the top
+            return [payload.data, ...prev];
           });
         } else if (payload.event === 'status_update' || payload.event === 'matched') {
           setRequests((prev) =>

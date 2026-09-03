@@ -49,13 +49,15 @@ export const api = {
 
   getMessages: (matchId) => fetchJson(`/messages/${matchId}`),
 
-  // Crisis Zones
+  // Crisis Zones & NDMA Sachet Alerts
   submitZoneReport: (data) => fetchJson('/zone-reports', {
     method: 'POST',
     body: JSON.stringify(data),
   }),
 
   getConfirmedZones: () => fetchJson('/confirmed-zones'),
+
+  getSachetAlerts: () => fetchJson('/sachet-alerts'),
 
   // Simulation & Integration Helper (Dev A test suite)
   simulateAccept: (requestId) => fetchJson(`/requests/${requestId}/accept`, {

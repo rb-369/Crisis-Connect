@@ -93,7 +93,7 @@ const CATEGORIES = [
 ];
 
 export default function InstantReport({ onRequestCreated }) {
-  const [coords, setCoords] = useState({ lat: 37.7749, lng: -122.4194 });
+  const [coords, setCoords] = useState({ lat: 19.0760, lng: 72.8777 }); // Mumbai, India
   const [gpsStatus, setGpsStatus] = useState('detecting'); // detecting, acquired, denied, manual
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState(null);
@@ -142,42 +142,52 @@ export default function InstantReport({ onRequestCreated }) {
 
     try {
       const created = await api.createRequest(payload);
+      setIsSubmitting(false);
       onRequestCreated(created);
     } catch (err) {
-      console.error('Submission failed:', err);
-      setErrorMessage(err.message || 'Failed to send emergency request. Check server connection.');
+      console.error('Instant SOS creation failed:', err);
+      setErrorMessage(err.message || 'Failed to dispatch SOS. Check backend connection.');
       setIsSubmitting(false);
-      setSelectedCategory(null);
     }
   };
 
   return (
     <div className="max-w-4xl mx-auto py-2 sm:py-6">
-      {/* Header Banner - Zero Glare, High Contrast for Daylight */}
-      <div className="text-center mb-6">
-        <div className="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-[#FEE2E2] border border-[#FECACA] text-[#991B1B] text-xs font-bold mb-2">
-          <Flame className="w-3.5 h-3.5 animate-bounce text-[#DC2626]" />
-          <span>Step 1: Rapid 1-Tap SOS Dispatch</span>
+      {/* Top Banner: Emergency Direct Hotline */}
+      <div className="mb-6 p-4 rounded-2xl bg-[#0F172A] text-white flex flex-col sm:flex-row items-center justify-between gap-3 shadow-md">
+        <div className="flex items-center space-x-3 text-center sm:text-left">
+          <div className="w-10 h-10 rounded-xl bg-[#DC2626] flex items-center justify-center font-black text-white text-lg">
+            SOS
+          </div>
+          <div>
+            <div className="font-extrabold text-sm sm:text-base tracking-tight">
+              1-Tap Rapid Emergency Beacon (Mumbai City)
+            </div>
+            <div className="text-xs text-[#94A3B8] font-medium">
+              Tap a category below to instantly dispatch distress beacon. No account or login required.
+            </div>
+          </div>
         </div>
-        <h1 className="text-2xl sm:text-4xl font-extrabold text-[#0F172A] tracking-tight">
-          What emergency aid is needed?
-        </h1>
-        <p className="text-[#475569] text-sm sm:text-base mt-1.5 max-w-xl mx-auto font-medium">
-          Tap your urgent need below. Responders receive your exact GPS location immediately without needing an account.
-        </p>
+
+        <div className="flex items-center space-x-2">
+          <span className="w-2.5 h-2.5 rounded-full bg-[#16A34A] animate-ping" />
+          <span className="text-xs font-mono font-bold text-[#E2E8F0] tracking-wide">
+            NDMA / BMC Active
+          </span>
+        </div>
       </div>
 
-      {/* GPS Location Bar */}
-      <div className="mb-6 p-4 rounded-2xl bg-white border border-[#E2E8F0] shadow-sm flex flex-col sm:flex-row items-center justify-between gap-3">
-        <div className="flex items-center space-x-3.5 w-full sm:w-auto">
-          <div className={`p-2.5 rounded-xl ${
+      {/* GPS Location Signal Bar */}
+      <div className="mb-6 p-4 rounded-2xl bg-white border border-[#CBD5E1] shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="flex items-center space-x-3">
+          <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold ${
             gpsStatus === 'acquired' ? 'bg-[#DCFCE7] text-[#15803D]' : 'bg-[#FEF3C7] text-[#B45309]'
           }`}>
             <LocateFixed className="w-5 h-5" />
           </div>
           <div>
-            <div className="font-bold text-sm text-[#0F172A] flex items-center space-x-2">
-              <span>{gpsStatus === 'acquired' ? 'Exact GPS Location Acquired' : gpsStatus === 'detecting' ? 'Acquiring GPS Signal...' : 'GPS Offline (Using Coordinate Pin)'}</span>
+            <div className="font-extrabold text-xs sm:text-sm text-[#0F172A] flex items-center space-x-1.5">
+              <span>{gpsStatus === 'acquired' ? 'Exact GPS Location Acquired' : gpsStatus === 'detecting' ? 'Acquiring GPS Signal...' : 'GPS Offline (Using Mumbai Coordinate Pin)'}</span>
               {gpsStatus === 'acquired' && (
                 <span className="w-2 h-2 rounded-full bg-[#15803D] inline-block animate-ping-slow" />
               )}
@@ -202,7 +212,7 @@ export default function InstantReport({ onRequestCreated }) {
       {showManualCoords && (
         <div className="mb-6 p-5 rounded-2xl bg-white border border-[#CBD5E1] shadow-sm text-xs space-y-3">
           <div className="font-bold text-sm text-[#0F172A]">
-            Manual Location Calibration
+            Manual Location Calibration (Mumbai Presets)
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
@@ -232,24 +242,42 @@ export default function InstantReport({ onRequestCreated }) {
               />
             </div>
           </div>
-          <div className="flex gap-2 pt-1">
+          <div className="flex flex-wrap gap-2 pt-1">
             <button
               onClick={() => {
-                setCoords({ lat: 37.7749, lng: -122.4194 });
+                setCoords({ lat: 19.0178, lng: 72.8478 });
                 setGpsStatus('manual');
               }}
-              className="px-3 py-1 rounded-lg bg-[#F1F5F9] hover:bg-[#E2E8F0] text-[#475569] font-medium"
+              className="px-3 py-1.5 rounded-lg bg-[#F1F5F9] text-[#0F172A] font-bold hover:bg-[#E2E8F0]"
             >
-              Preset: Central Zone
+              Dadar TT Circle
             </button>
             <button
               onClick={() => {
-                setCoords({ lat: 37.7812, lng: -122.4180 });
+                setCoords({ lat: 19.0688, lng: 72.8785 });
                 setGpsStatus('manual');
               }}
-              className="px-3 py-1 rounded-lg bg-[#F1F5F9] hover:bg-[#E2E8F0] text-[#475569] font-medium"
+              className="px-3 py-1.5 rounded-lg bg-[#F1F5F9] text-[#0F172A] font-bold hover:bg-[#E2E8F0]"
             >
-              Preset: Flood Cluster
+              Kurla West
+            </button>
+            <button
+              onClick={() => {
+                setCoords({ lat: 19.0596, lng: 72.8295 });
+                setGpsStatus('manual');
+              }}
+              className="px-3 py-1.5 rounded-lg bg-[#F1F5F9] text-[#0F172A] font-bold hover:bg-[#E2E8F0]"
+            >
+              Bandra West
+            </button>
+            <button
+              onClick={() => {
+                setCoords({ lat: 19.1136, lng: 72.8697 });
+                setGpsStatus('manual');
+              }}
+              className="px-3 py-1.5 rounded-lg bg-[#F1F5F9] text-[#0F172A] font-bold hover:bg-[#E2E8F0]"
+            >
+              Andheri Subway
             </button>
           </div>
         </div>

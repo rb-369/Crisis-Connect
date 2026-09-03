@@ -27,6 +27,7 @@ import { CrisisWebSocketClient } from '../../services/websocket';
 import { api } from '../../services/api';
 import RequesterChat from './RequesterChat';
 import DuplicateBadge from './DuplicateBadge';
+import RequesterLiveMap from './RequesterLiveMap';
 import { getBloodGroupTheme, getCompatibleDonorsForRecipient } from '../../utils/bloodCompatibility';
 
 const STATUS_STEPS = [
@@ -35,6 +36,7 @@ const STATUS_STEPS = [
   { id: 'on_the_way', label: 'On The Way', desc: 'Responder transit to hospital / site', icon: Truck },
   { id: 'resolved', label: 'Delivered & Complete', desc: 'Resource provided successfully', icon: CheckCircle },
 ];
+
 
 export default function LiveStatusTracker({ initialRequest, onNewRequest }) {
   const [request, setRequest] = useState(initialRequest);
@@ -348,11 +350,18 @@ export default function LiveStatusTracker({ initialRequest, onNewRequest }) {
         />
       ) : (
         <div className="space-y-6">
+          {/* Live MapLibre Dispatch & Shortest Road Route Map */}
+          <RequesterLiveMap 
+            request={request} 
+            helperInfo={request.match_info} 
+          />
+
           {/* Dispatch Pipeline Cards */}
           <div className="bg-white border border-[#CBD5E1] p-6 rounded-2xl shadow-sm">
             <h3 className="text-xs font-bold uppercase tracking-wider text-[#64748B] mb-5">
               Live Fulfillment Progression
             </h3>
+
 
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3.5">
               {STATUS_STEPS.map((step, idx) => {

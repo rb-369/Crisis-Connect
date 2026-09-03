@@ -33,6 +33,8 @@ import {
   getBloodGroupTheme, 
   getCompatibleDonorsForRecipient 
 } from '../../utils/bloodCompatibility';
+import { fetchShortestRoute } from '../../utils/routeUtils';
+
 
 const DONOR_PROFILES = [
   {
@@ -363,21 +365,79 @@ export default function VolunteerMock({ currentUser, onOpenAuthModal }) {
       }
     });
 
-    // 3. Update Route Line if active match
-    if (activeMatch && mapInstance.current.getSource('route-source')) {
-      const routeGeoJson = {
-        type: 'Feature',
-        geometry: {
-          type: 'LineString',
-          coordinates: [
-            [selectedDonorProfile.lng, selectedDonorProfile.lat],
-            [activeMatch.lng, activeMatch.lat]
-          ]
+    // 3. Update Shortest Road Navigation Line if active match
+    if (activeMatch && mapInstance.current) {
+      fetchShortestRoute(
+        selectedDonorProfile.lng,
+        selectedDonorProfile.lat,
+        activeMatch.lng,
+        activeMatch.lat
+      ).then((route) => {
+        if (!mapInstance.current) return;
+
+        const lineCoords = route.coordinates.length > 0
+          ? route.coordinates
+          : [
+              [selectedDonorProfile.lng, selectedDonorProfile.lat],
+              [activeMatch.lng, activeMatch.lat]
+            ];
+
+        const routeGeoJson = {
+          type: 'Feature',
+          geometry: {
+            type: 'LineString',
+            coordinates: lineCoords
+          }
+        };
+
+        if (mapInstance.current.getSource('route-source')) {
+          mapInstance.current.getSource('route-source').setData(routeGeoJson);
+        } else {
+          mapInstance.current.addSource('route-source', {
+            type: 'geojson',
+            data: routeGeoJson
+          });
+
+          // Outer glowing casing
+          mapInstance.current.addLayer({
+            id: 'route-casing',
+            type: 'line',
+            source: 'route-source',
+            layout: { 'line-join': 'round', 'line-cap': 'round' },
+            paint: {
+              'line-color': '#93C5FD',
+              'line-width': 8,
+              'line-opacity': 0.7
+            }
+          });
+
+          // Inner primary navigation path
+          mapInstance.current.addLayer({
+            id: 'route-line',
+            type: 'line',
+            source: 'route-source',
+            layout: { 'line-join': 'round', 'line-cap': 'round' },
+            paint: {
+              'line-color': '#2563EB',
+              'line-width': 4
+            }
+          });
         }
-      };
-      mapInstance.current.getSource('route-source').setData(routeGeoJson);
+
+        // Fit bounds so both points and path are in full view
+        const minLng = Math.min(selectedDonorProfile.lng, activeMatch.lng);
+        const maxLng = Math.max(selectedDonorProfile.lng, activeMatch.lng);
+        const minLat = Math.min(selectedDonorProfile.lat, activeMatch.lat);
+        const maxLat = Math.max(selectedDonorProfile.lat, activeMatch.lat);
+
+        mapInstance.current.fitBounds(
+          [[minLng, minLat], [maxLng, maxLat]],
+          { padding: 70, maxZoom: 15, duration: 800 }
+        );
+      });
     }
   }, [requests, selectedDonorProfile, viewMode, activeMatch]);
+
 
   const handleAccept = async (req) => {
     try {

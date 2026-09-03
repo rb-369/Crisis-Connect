@@ -238,6 +238,13 @@ export default function AdminDashboard({ onOpenMap }) {
                         ID: {req.id?.substring(0, 8)}...
                       </span>
                     </div>
+
+                    {req.photo_url && (
+                      <div className="mt-2 text-xs flex items-center space-x-2 text-[#0284C7] bg-[#E0F2FE] border border-[#BAE6FD] px-3 py-1.5 rounded-xl font-bold w-fit">
+                        <ShieldCheck className="w-4 h-4 text-[#0284C7] flex-shrink-0" />
+                        <span>On-Scene Evidence Proof: {req.photo_url}</span>
+                      </div>
+                    )}
                   </div>
 
                   {/* Right: Moderation Triage Actions */}

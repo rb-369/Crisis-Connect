@@ -1,4 +1,19 @@
-const API_BASE = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
+// Dynamically determine backend host based on the current browser URL
+// This ensures connections work seamlessly when accessed from localhost, LAN IP (friend's laptop), or deployed domains!
+function getApiBase() {
+  if (import.meta.env.VITE_BACKEND_URL) {
+    return import.meta.env.VITE_BACKEND_URL;
+  }
+  if (typeof window !== 'undefined') {
+    const protocol = window.location.protocol === 'https:' ? 'https:' : 'http:';
+    const hostname = window.location.hostname || 'localhost';
+    // If running on a non-standard port or tunnel that bundles backend, or default port 8000
+    return `${protocol}//${hostname}:8000`;
+  }
+  return 'http://localhost:8000';
+}
+
+const API_BASE = getApiBase();
 
 async function fetchJson(endpoint, options = {}) {
   const url = `${API_BASE}${endpoint}`;

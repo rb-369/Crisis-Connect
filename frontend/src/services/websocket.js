@@ -1,5 +1,6 @@
 /**
- * Native WebSocket Client with automatic reconnection and channel subscription
+ * Native WebSocket Client with automatic reconnection and dynamic host resolution.
+ * Automatically adapts when accessed from localhost, friend's laptop via LAN IP, or public domains.
  */
 export class CrisisWebSocketClient {
   constructor(channelType, channelId, onMessage, onStatusChange) {
@@ -16,8 +17,20 @@ export class CrisisWebSocketClient {
   }
 
   getWebSocketUrl() {
-    const defaultWsHost = 'localhost:8000';
-    return `ws://${defaultWsHost}/ws/${this.channelType}/${encodeURIComponent(this.channelId)}`;
+    if (import.meta.env.VITE_WS_URL) {
+      return `${import.meta.env.VITE_WS_URL}/ws/${this.channelType}/${encodeURIComponent(this.channelId)}`;
+    }
+
+    let wsProtocol = 'ws:';
+    let host = 'localhost:8000';
+
+    if (typeof window !== 'undefined') {
+      wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const hostname = window.location.hostname || 'localhost';
+      host = `${hostname}:8000`;
+    }
+
+    return `${wsProtocol}//${host}/ws/${this.channelType}/${encodeURIComponent(this.channelId)}`;
   }
 
   connect() {
@@ -43,24 +56,32 @@ export class CrisisWebSocketClient {
 
       this.ws.onclose = () => {
         if (!this.isClosedManually) {
-          if (this.onStatusChange) this.onStatusChange('disconnected');
+          if (this.onStatusChange) this.onStatusChange('reconnecting');
           this.scheduleReconnect();
+        } else {
+          if (this.onStatusChange) this.onStatusChange('disconnected');
         }
       };
 
       this.ws.onerror = (err) => {
-        if (this.onStatusChange) this.onStatusChange('error');
+        console.warn(`[WebSocket Error] on channel ${this.channelType}:`, err);
+        if (this.ws) {
+          this.ws.close();
+        }
       };
     } catch (err) {
+      console.error('[WebSocket Init Error]:', err);
       this.scheduleReconnect();
     }
   }
 
   scheduleReconnect() {
     if (this.reconnectAttempts >= this.maxReconnectAttempts) {
+      console.warn('[WebSocket Max Reconnects reached]. Manual reload required.');
       if (this.onStatusChange) this.onStatusChange('failed');
       return;
     }
+
     const delay = Math.min(1000 * Math.pow(1.5, this.reconnectAttempts), 10000);
     this.reconnectAttempts++;
     this.reconnectTimeout = setTimeout(() => {
@@ -68,20 +89,21 @@ export class CrisisWebSocketClient {
     }, delay);
   }
 
-  send(data) {
+  sendMessage(messageObj) {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-      const text = typeof data === 'string' ? data : JSON.stringify(data);
-      this.ws.send(text);
+      this.ws.send(JSON.stringify(messageObj));
+    } else {
+      console.warn('[WebSocket not open]. Cannot send message.');
     }
   }
 
   close() {
     this.isClosedManually = true;
-    if (this.reconnectTimeout) clearTimeout(this.reconnectTimeout);
+    if (this.reconnectTimeout) {
+      clearTimeout(this.reconnectTimeout);
+    }
     if (this.ws) {
       this.ws.close();
-      this.ws = null;
     }
-    if (this.onStatusChange) this.onStatusChange('closed');
   }
 }

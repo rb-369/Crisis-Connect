@@ -1,0 +1,22 @@
+# Environment variables & secrets
+.env
+.env*
+*.env
+
+# Dependencies & build outputs
+node_modules/
+dist/
+build/
+.venv/
+__pycache__/
+*.pyc
+
+# IDE & AI Assistant metadata
+.agents/
+.claude/
+.gemini/
+skills-lock.json
+
+# Private docs
+my-docs/
+my-docs*/

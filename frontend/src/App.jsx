@@ -29,12 +29,22 @@ export default function App() {
     }
   });
 
-  // Maintain global WebSocket connection for connection badge
+  // Maintain global WebSocket connection for connection badge and match sync
   useEffect(() => {
     const wsClient = new CrisisWebSocketClient(
       'admin',
       'all',
-      () => {},
+      (payload) => {
+        if (payload.event === 'matched' && payload.data) {
+          setActiveRequest((prev) => {
+            if (prev && prev.id === payload.data.id) {
+              setRequesterStep('status');
+              return { ...prev, ...payload.data };
+            }
+            return prev;
+          });
+        }
+      },
       (status) => setWsStatus(status)
     );
     return () => wsClient.close();
@@ -42,7 +52,12 @@ export default function App() {
 
   const handleRequestCreated = (newReq) => {
     setActiveRequest(newReq);
-    setRequesterStep('enrichment');
+    // If it's a blood request with complete details, advance directly to live status tracker
+    if (newReq.category === 'blood' && newReq.service_details?.blood_group) {
+      setRequesterStep('status');
+    } else {
+      setRequesterStep('enrichment');
+    }
   };
 
   const handleEnrichmentComplete = (updatedReq) => {

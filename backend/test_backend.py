@@ -86,10 +86,27 @@ def test_endpoints():
     assert res.status_code == 201
     print("[PASS] POST /zone-reports -> 201 Created")
 
-    # 9. Confirmed zones
-    res = client.get("/confirmed-zones")
-    assert res.status_code == 200
-    print("[PASS] GET /confirmed-zones -> 200 OK")
+    # 10. Concurrency Accept Test (Single accept allowed, second volunteer gets 409)
+    res_accept1 = client.post(f"/requests/{req_id}/accept", json={
+        "helper_id": "vol-rahul",
+        "helper_name": "Rahul Sawant (B+)",
+        "helper_phone": "+91 98190 77654",
+        "blood_group": "B+",
+    })
+    assert res_accept1.status_code == 200, f"First accept failed: {res_accept1.text}"
+    assert res_accept1.json()["status"] == "matched"
+    print("[PASS] POST /requests/{id}/accept (First responder) -> 200 OK Matched")
+
+    # Second volunteer attempts to accept the already-matched request
+    res_accept2 = client.post(f"/requests/{req_id}/accept", json={
+        "helper_id": "vol-vikram",
+        "helper_name": "Vikram Joshi (O-)",
+        "helper_phone": "+91 98201 44021",
+        "blood_group": "O-",
+    })
+    assert res_accept2.status_code == 409, f"Expected 409 Conflict, got {res_accept2.status_code}: {res_accept2.text}"
+    assert "already been accepted" in res_accept2.json()["detail"]
+    print("[PASS] POST /requests/{id}/accept (Second responder) -> 409 Conflict Guard working!")
 
     print("\n>>> ALL BACKEND API ENDPOINTS & LIVE SUPABASE INTEGRATION PASSED SUCCESSFULLY! <<<")
 

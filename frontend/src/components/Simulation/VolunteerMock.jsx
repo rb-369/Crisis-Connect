@@ -23,7 +23,12 @@ import {
   Sparkles,
   ShieldCheck,
   Award,
-  Layers
+  Layers,
+  Lock,
+  Bell,
+  AlertTriangle,
+  Filter,
+  CheckCircle2,
 } from 'lucide-react';
 import { api } from '../../services/api';
 import { CrisisWebSocketClient } from '../../services/websocket';
@@ -31,9 +36,11 @@ import {
   BLOOD_GROUPS, 
   isDonorCompatible, 
   getBloodGroupTheme, 
-  getCompatibleDonorsForRecipient 
+  getCompatibleDonorsForRecipient,
+  getCompatibleRecipientsForDonor,
 } from '../../utils/bloodCompatibility';
 import { fetchShortestRoute } from '../../utils/routeUtils';
+import { playEmergencyAlertChime } from '../../utils/audioChime';
 
 
 const DONOR_PROFILES = [
@@ -96,6 +103,9 @@ const DONOR_PROFILES = [
 
 export default function VolunteerMock({ currentUser, onOpenAuthModal }) {
   const [selectedDonorProfile, setSelectedDonorProfile] = useState(DONOR_PROFILES[0]);
+  const [filterCompatibleOnly, setFilterCompatibleOnly] = useState(true);
+  const [incomingAlert, setIncomingAlert] = useState(null);
+  const [conflictModal, setConflictModal] = useState(null);
   const [requests, setRequests] = useState([]);
   const [activeMatch, setActiveMatch] = useState(null);
   const [chatMessages, setChatMessages] = useState([]);
@@ -109,6 +119,35 @@ export default function VolunteerMock({ currentUser, onOpenAuthModal }) {
   const mapInstance = useRef(null);
   const markersRef = useRef({});
   const volunteerMarkerRef = useRef(null);
+  const selectedDonorProfileRef = useRef(selectedDonorProfile);
+
+  useEffect(() => {
+    selectedDonorProfileRef.current = selectedDonorProfile;
+  }, [selectedDonorProfile]);
+
+  // Synchronize with logged-in user profile if present
+  useEffect(() => {
+    if (currentUser) {
+      const match = DONOR_PROFILES.find(
+        (p) => p.bloodGroup === currentUser.bloodGroup || (currentUser.name && p.name.includes(currentUser.name))
+      );
+      if (match) {
+        setSelectedDonorProfile(match);
+      } else if (currentUser.bloodGroup || currentUser.name) {
+        setSelectedDonorProfile({
+          id: currentUser.id || 'custom-vol-user',
+          name: currentUser.name || 'Active Volunteer',
+          role: currentUser.role || 'volunteer',
+          bloodGroup: currentUser.bloodGroup || null,
+          phone: currentUser.phone || '+91 98201 00000',
+          orgName: currentUser.org_name || 'Emergency Response Fleet',
+          lat: 19.0178,
+          lng: 72.8478,
+          label: currentUser.bloodGroup ? `🩸 Blood Donor (${currentUser.bloodGroup})` : '🚑 Volunteer Responder',
+        });
+      }
+    }
+  }, [currentUser]);
 
   const fetchRequests = async () => {
     setLoading(true);
@@ -131,10 +170,46 @@ export default function VolunteerMock({ currentUser, onOpenAuthModal }) {
       'all',
       (payload) => {
         if (payload.event === 'new_request' && payload.data) {
-          setRequests((prev) => {
-            if (prev.some((r) => r.id === payload.data.id)) return prev;
-            return [payload.data, ...prev];
-          });
+          const newReq = payload.data;
+          const isBlood = newReq.category === 'blood';
+          const reqBlood = newReq.service_details?.blood_group;
+          const currentProfile = selectedDonorProfileRef.current;
+          const donorBlood = currentProfile?.bloodGroup;
+          const isCompatible = isBlood && donorBlood ? isDonorCompatible(donorBlood, reqBlood) : true;
+
+          // If blood emergency: ONLY compatible donors receive alert sound and banner
+          if (isBlood && donorBlood) {
+            if (isCompatible) {
+              playEmergencyAlertChime();
+              setIncomingAlert({
+                title: '🩸 Compatible Blood Need Alert!',
+                hospital: newReq.service_details?.hospital_name || 'Emergency Medical Center',
+                bloodGroup: reqBlood,
+                units: newReq.service_details?.units || 2,
+                donorBlood: donorBlood,
+                details: newReq.details,
+                req: newReq,
+              });
+              setRequests((prev) => {
+                if (prev.some((r) => r.id === newReq.id)) return prev;
+                return [newReq, ...prev];
+              });
+            } else {
+              // Incompatible donor: Do NOT chime, do NOT show banner
+              setRequests((prev) => {
+                if (prev.some((r) => r.id === newReq.id)) return prev;
+                return [newReq, ...prev];
+              });
+            }
+          } else {
+            if (newReq.urgency === 'high') {
+              playEmergencyAlertChime();
+            }
+            setRequests((prev) => {
+              if (prev.some((r) => r.id === newReq.id)) return prev;
+              return [newReq, ...prev];
+            });
+          }
         } else if (payload.event === 'status_update' || payload.event === 'matched') {
           setRequests((prev) =>
             prev.map((r) => (r.id === payload.data.id ? { ...r, ...payload.data } : r))
@@ -242,6 +317,14 @@ export default function VolunteerMock({ currentUser, onOpenAuthModal }) {
     };
   }, [viewMode]);
 
+  const visibleRequests = requests.filter((r) => {
+    if (filterCompatibleOnly && r.category === 'blood' && selectedDonorProfile.bloodGroup) {
+      const reqBlood = r.service_details?.blood_group;
+      return isDonorCompatible(selectedDonorProfile.bloodGroup, reqBlood);
+    }
+    return true;
+  });
+
   // Update MapLibre Markers & Volunteer Location on Data Change
   useEffect(() => {
     if (!mapInstance.current || viewMode !== 'map') return;
@@ -283,7 +366,7 @@ export default function VolunteerMock({ currentUser, onOpenAuthModal }) {
       )
       .addTo(mapInstance.current);
 
-    // 2. Incident Request Pins
+    // 2. Incident Request Pins (Filtered to compatible if toggle active)
     const currentIds = new Set();
     const colorMap = {
       rescue: '#991B1B',
@@ -295,7 +378,7 @@ export default function VolunteerMock({ currentUser, onOpenAuthModal }) {
       transport: '#0D9488',
     };
 
-    requests.forEach((req) => {
+    visibleRequests.forEach((req) => {
       currentIds.add(req.id);
       const isBlood = req.category === 'blood';
       const reqBlood = req.service_details?.blood_group;
@@ -436,7 +519,7 @@ export default function VolunteerMock({ currentUser, onOpenAuthModal }) {
         );
       });
     }
-  }, [requests, selectedDonorProfile, viewMode, activeMatch]);
+  }, [visibleRequests, selectedDonorProfile, viewMode, activeMatch]);
 
 
   const handleAccept = async (req) => {
@@ -478,6 +561,12 @@ export default function VolunteerMock({ currentUser, onOpenAuthModal }) {
       fetchRequests();
     } catch (err) {
       console.error('Accept error:', err);
+      const conflictMsg = err.message || 'This emergency request has already been accepted by another responder.';
+      setConflictModal({
+        title: '⚠️ Request Already Claimed',
+        message: conflictMsg,
+      });
+      fetchRequests();
     }
   };
 
@@ -627,6 +716,111 @@ export default function VolunteerMock({ currentUser, onOpenAuthModal }) {
         </div>
       </div>
 
+      {/* Real-time Transfusion Compatibility Engine & Selective Filter Bar */}
+      <div className="mb-5 p-4 rounded-2xl bg-white border border-[#CBD5E1] shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="flex items-center space-x-3">
+          <div className="w-10 h-10 rounded-xl bg-red-100 text-red-600 flex items-center justify-center flex-shrink-0 font-bold shadow-xs">
+            <HeartHandshake className="w-5 h-5" />
+          </div>
+          <div>
+            <div className="flex items-center space-x-2">
+              <span className="text-xs font-black uppercase tracking-wider text-[#0F172A]">
+                Transfusion Compatibility Engine:
+              </span>
+              <span className="px-2.5 py-0.5 rounded-md bg-red-600 text-white font-mono font-black text-xs shadow-xs">
+                {selectedDonorProfile.bloodGroup || 'General Responder'}
+              </span>
+            </div>
+            <p className="text-[11px] text-[#64748B] font-medium mt-0.5">
+              {selectedDonorProfile.bloodGroup 
+                ? `Compatible to donate red cells to: ${getCompatibleRecipientsForDonor(selectedDonorProfile.bloodGroup).join(', ')}`
+                : 'Registered for general emergency disaster response, food, water, and shelter relief.'}
+            </p>
+          </div>
+        </div>
+
+        <label className="flex items-center space-x-2.5 px-3 py-2 rounded-xl bg-slate-50 border border-[#CBD5E1] text-xs font-bold text-slate-700 cursor-pointer select-none hover:bg-slate-100 transition shadow-2xs">
+          <input
+            type="checkbox"
+            checked={filterCompatibleOnly}
+            onChange={(e) => setFilterCompatibleOnly(e.target.checked)}
+            className="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500 cursor-pointer"
+          />
+          <Filter className="w-3.5 h-3.5 text-blue-600" />
+          <span>Only Receive Compatible Matches</span>
+          <span className="px-1.5 py-0.5 rounded bg-blue-100 text-blue-800 text-[10px] font-black uppercase">Active</span>
+        </label>
+      </div>
+
+      {/* Incoming Compatible Emergency Audio/Visual Broadcast Banner */}
+      {incomingAlert && (
+        <div className="mb-5 p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-red-600 via-rose-600 to-red-700 text-white shadow-xl border-2 border-red-400 ring-4 ring-red-500/20 flex flex-col sm:flex-row sm:items-center justify-between gap-4 animate-bounce-subtle">
+          <div className="flex items-start space-x-3.5">
+            <div className="w-11 h-11 rounded-2xl bg-white text-red-600 flex items-center justify-center flex-shrink-0 shadow-md font-black text-xl">
+              🩸
+            </div>
+            <div>
+              <div className="flex items-center space-x-2">
+                <span className="px-2.5 py-0.5 rounded-full bg-white text-red-700 text-[10px] font-black uppercase tracking-wider shadow-sm">
+                  ⚡ Live Transfusion Radar Match
+                </span>
+                <span className="text-[11px] font-mono text-red-100 font-bold">
+                  Needed: {incomingAlert.bloodGroup} ({incomingAlert.units} Units)
+                </span>
+              </div>
+              <h4 className="text-base font-black text-white mt-1">
+                {incomingAlert.hospital}
+              </h4>
+              <p className="text-xs text-red-100 mt-0.5">
+                {incomingAlert.details || `Emergency blood request matched your ${incomingAlert.donorBlood} donation profile!`}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center space-x-2 flex-shrink-0">
+            <button
+              onClick={() => {
+                handleAccept(incomingAlert.req);
+                setIncomingAlert(null);
+              }}
+              className="px-4 py-2.5 rounded-xl bg-white hover:bg-red-50 text-red-600 font-black text-xs shadow-lg transition cursor-pointer flex items-center space-x-1.5"
+            >
+              <Check className="w-4 h-4" />
+              <span>1-Tap Accept & Dispatch</span>
+            </button>
+            <button
+              onClick={() => setIncomingAlert(null)}
+              className="p-2 text-white/80 hover:text-white text-xs font-bold cursor-pointer"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Concurrency Guard Modal (If another volunteer already accepted) */}
+      {conflictModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in">
+          <div className="bg-white rounded-3xl p-6 max-w-md w-full border border-slate-200 shadow-2xl space-y-4">
+            <div className="w-14 h-14 rounded-2xl bg-amber-100 text-amber-600 flex items-center justify-center mx-auto shadow-sm">
+              <Lock className="w-7 h-7" />
+            </div>
+            <div className="text-center space-y-1.5">
+              <h3 className="text-lg font-black text-slate-900">{conflictModal.title}</h3>
+              <p className="text-xs text-slate-600 font-medium leading-relaxed">{conflictModal.message}</p>
+            </div>
+            <div className="pt-2">
+              <button
+                onClick={() => setConflictModal(null)}
+                className="w-full py-2.5 rounded-xl bg-slate-900 text-white font-black text-xs hover:bg-slate-800 transition cursor-pointer shadow-md"
+              >
+                Understood & Return to Radar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* MAIN CONTENT GRID */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         
@@ -695,9 +889,16 @@ export default function VolunteerMock({ currentUser, onOpenAuthModal }) {
                     <button
                       onClick={() => handleAccept(selectedPinReq)}
                       disabled={selectedPinReq.status !== 'requested'}
-                      className="px-3 py-1.5 rounded-xl bg-[#2563EB] hover:bg-[#1D4ED8] text-white text-xs font-extrabold shadow-sm transition disabled:opacity-40 cursor-pointer"
+                      className="px-3 py-1.5 rounded-xl bg-[#2563EB] hover:bg-[#1D4ED8] text-white text-xs font-extrabold shadow-sm transition disabled:opacity-50 cursor-pointer flex items-center space-x-1"
                     >
-                      {selectedPinReq.status === 'requested' ? 'Accept (1-Tap)' : 'Matched'}
+                      {selectedPinReq.status === 'requested' ? (
+                        <span>Accept (1-Tap)</span>
+                      ) : (
+                        <span className="flex items-center space-x-1 text-emerald-100">
+                          <CheckCircle2 className="w-3.5 h-3.5" />
+                          <span>{selectedPinReq.match_info?.helper_name ? `Claimed by ${selectedPinReq.match_info.helper_name.split('(')[0]}` : 'Claimed'}</span>
+                        </span>
+                      )}
                     </button>
                     <button
                       onClick={() => setSelectedPinReq(null)}
@@ -716,138 +917,158 @@ export default function VolunteerMock({ currentUser, onOpenAuthModal }) {
                   Active Emergency & Relief Feed
                 </h4>
                 <span className="text-xs text-[#64748B] font-mono">
-                  {requests.length} total signals
+                  {visibleRequests.length} compatible ({requests.length} total)
                 </span>
               </div>
 
               <div className="space-y-3 max-h-[560px] overflow-y-auto pr-1">
-                {requests.map((r) => {
-                  const isBlood = r.category === 'blood';
-                  const reqBlood = r.service_details?.blood_group;
-                  const donorBlood = selectedDonorProfile.bloodGroup;
-                  const isCompatible = isBlood && donorBlood ? isDonorCompatible(donorBlood, reqBlood) : false;
-                  const isMatched = r.status === 'matched' || r.status === 'on_the_way' || r.status === 'arrived';
-                  const isResolved = r.status === 'resolved' || r.status === 'completed';
+                {visibleRequests.length === 0 ? (
+                  <div className="p-8 text-center bg-slate-50 border border-slate-200 rounded-2xl">
+                    <HeartHandshake className="w-8 h-8 text-slate-400 mx-auto mb-2 animate-pulse" />
+                    <p className="text-xs font-bold text-slate-700">No compatible requests in feed</p>
+                    <p className="text-[11px] text-slate-500 mt-1">
+                      Your {selectedDonorProfile.bloodGroup || 'volunteer'} profile is on standby. Only compatible emergency broadcasts will appear here.
+                    </p>
+                  </div>
+                ) : (
+                  visibleRequests.map((r) => {
+                    const isBlood = r.category === 'blood';
+                    const reqBlood = r.service_details?.blood_group;
+                    const donorBlood = selectedDonorProfile.bloodGroup;
+                    const isCompatible = isBlood && donorBlood ? isDonorCompatible(donorBlood, reqBlood) : false;
+                    const isMatched = r.status === 'matched' || r.status === 'on_the_way' || r.status === 'arrived';
+                    const isResolved = r.status === 'resolved' || r.status === 'completed';
 
-                  return (
-                    <div
-                      key={r.id}
-                      className={`p-4 rounded-2xl border transition-all text-xs ${
-                        isCompatible
-                          ? 'bg-[#FFF1F2] border-[#FDA4AF] ring-2 ring-red-400/20 shadow-sm'
-                          : 'bg-[#F8FAFC] border-[#CBD5E1]'
-                      }`}
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <div className="flex flex-wrap items-center gap-1.5 mb-1.5">
-                            <span className="font-black uppercase text-[#991B1B] bg-red-100 px-2 py-0.5 rounded-md text-[10px]">
-                              {r.category}
-                            </span>
-
-                            {isBlood && reqBlood && (
-                              <span className="px-2 py-0.5 rounded-md bg-red-600 text-white font-mono font-bold text-[10px] flex items-center space-x-1">
-                                <HeartHandshake className="w-3 h-3" />
-                                <span>Needed: {reqBlood} ({r.service_details?.units || 2} Units)</span>
+                    return (
+                      <div
+                        key={r.id}
+                        className={`p-4 rounded-2xl border transition-all text-xs ${
+                          isCompatible
+                            ? 'bg-[#FFF1F2] border-[#FDA4AF] ring-2 ring-red-400/20 shadow-sm'
+                            : 'bg-[#F8FAFC] border-[#CBD5E1]'
+                        }`}
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <div className="flex flex-wrap items-center gap-1.5 mb-1.5">
+                              <span className="font-black uppercase text-[#991B1B] bg-red-100 px-2 py-0.5 rounded-md text-[10px]">
+                                {r.category}
                               </span>
+
+                              {isBlood && reqBlood && (
+                                <span className="px-2 py-0.5 rounded-md bg-red-600 text-white font-mono font-bold text-[10px] flex items-center space-x-1">
+                                  <HeartHandshake className="w-3 h-3" />
+                                  <span>Needed: {reqBlood} ({r.service_details?.units || 2} Units)</span>
+                                </span>
+                              )}
+
+                              {isBlood && donorBlood && (
+                                <span className={`px-2 py-0.5 rounded-md text-[10px] font-extrabold flex items-center space-x-1 ${
+                                  isCompatible ? 'bg-[#DCFCE7] text-[#15803D]' : 'bg-[#F1F5F9] text-[#64748B]'
+                                }`}>
+                                  <span>{isCompatible ? `✅ Compatible (${donorBlood} → ${reqBlood})` : `⚠️ Incompatible with your ${donorBlood}`}</span>
+                                </span>
+                              )}
+
+                              <span className="text-[#64748B] font-mono text-[10px]">
+                                Status: <strong className="capitalize">{r.status}</strong>
+                              </span>
+                            </div>
+
+                            <h5 className="font-bold text-[#0F172A] text-sm leading-snug">
+                              {r.details || '1-Tap Emergency Assistance Beacon'}
+                            </h5>
+
+                            {/* Specifics snippet */}
+                            {r.service_details && (
+                              <div className="mt-1.5 text-[11px] text-[#475569] space-y-0.5">
+                                {r.service_details.hospital_name && (
+                                  <p><strong>Hospital / Dispatch:</strong> {r.service_details.hospital_name}</p>
+                                )}
+                                {r.service_details.oxygen_type && (
+                                  <p><strong>Oxygen:</strong> {r.service_details.oxygen_type} ({r.service_details.flow_rate})</p>
+                                )}
+                                {r.service_details.medicine_names && (
+                                  <p><strong>Medication:</strong> {r.service_details.medicine_names}</p>
+                                )}
+                                {r.service_details.persons_count && (
+                                  <p><strong>Count:</strong> {r.service_details.persons_count} persons</p>
+                                )}
+                                {r.service_details.ocr_verification && (
+                                  <div className="pt-1 flex items-center gap-1.5 flex-wrap">
+                                    <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-md ${
+                                      r.service_details.ocr_verification.is_verified
+                                        ? 'bg-emerald-100 text-emerald-800'
+                                        : 'bg-amber-100 text-amber-800'
+                                    }`}>
+                                      {r.service_details.ocr_verification.is_verified ? '✓ Verified Doctor Rx' : '⚠ Unverified Rx (Needs Check)'}
+                                    </span>
+                                    {r.service_details.ocr_verification.doctor_info && (
+                                      <span className="text-[10px] text-emerald-800 font-semibold truncate max-w-[220px]">
+                                        🩺 {r.service_details.ocr_verification.doctor_info.name}
+                                      </span>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
                             )}
 
-                            {isBlood && donorBlood && (
-                              <span className={`px-2 py-0.5 rounded-md text-[10px] font-extrabold flex items-center space-x-1 ${
-                                isCompatible ? 'bg-[#DCFCE7] text-[#15803D]' : 'bg-[#F1F5F9] text-[#64748B]'
-                              }`}>
-                                <span>{isCompatible ? `✅ Compatible (${donorBlood} → ${reqBlood})` : `⚠️ Incompatible with your ${donorBlood}`}</span>
+                            <div className="flex items-center space-x-3 text-[10px] text-[#64748B] mt-2 font-mono">
+                              <span className="flex items-center space-x-1">
+                                <MapPin className="w-3 h-3 text-[#DC2626]" />
+                                <span>{r.lat.toFixed(4)}, {r.lng.toFixed(4)}</span>
                               </span>
-                            )}
-
-                            <span className="text-[#64748B] font-mono text-[10px]">
-                              Status: <strong className="capitalize">{r.status}</strong>
-                            </span>
+                              <button
+                                onClick={() => flyToIncident(r)}
+                                className="text-blue-600 font-bold hover:underline cursor-pointer"
+                              >
+                                View on MapLibre &rarr;
+                              </button>
+                            </div>
                           </div>
 
-                          <h5 className="font-bold text-[#0F172A] text-sm leading-snug">
-                            {r.details || '1-Tap Emergency Assistance Beacon'}
-                          </h5>
-
-                          {/* Specifics snippet */}
-                          {r.service_details && (
-                            <div className="mt-1.5 text-[11px] text-[#475569] space-y-0.5">
-                              {r.service_details.hospital_name && (
-                                <p><strong>Hospital / Dispatch:</strong> {r.service_details.hospital_name}</p>
-                              )}
-                              {r.service_details.oxygen_type && (
-                                <p><strong>Oxygen:</strong> {r.service_details.oxygen_type} ({r.service_details.flow_rate})</p>
-                              )}
-                              {r.service_details.medicine_names && (
-                                <p><strong>Medication:</strong> {r.service_details.medicine_names}</p>
-                              )}
-                              {r.service_details.persons_count && (
-                                <p><strong>Count:</strong> {r.service_details.persons_count} persons</p>
-                              )}
-                              {r.service_details.ocr_verification && (
-                                <div className="pt-1 flex items-center gap-1.5 flex-wrap">
-                                  <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-md ${
-                                    r.service_details.ocr_verification.is_verified
-                                      ? 'bg-emerald-100 text-emerald-800'
-                                      : 'bg-amber-100 text-amber-800'
-                                  }`}>
-                                    {r.service_details.ocr_verification.is_verified ? '✓ Verified Doctor Rx' : '⚠ Unverified Rx (Needs Check)'}
-                                  </span>
-                                  {r.service_details.ocr_verification.doctor_info && (
-                                    <span className="text-[10px] text-emerald-800 font-semibold truncate max-w-[220px]">
-                                      🩺 {r.service_details.ocr_verification.doctor_info.name}
-                                    </span>
-                                  )}
-                                </div>
-                              )}
-                            </div>
-                          )}
-
-                          <div className="flex items-center space-x-3 text-[10px] text-[#64748B] mt-2 font-mono">
-                            <span className="flex items-center space-x-1">
-                              <MapPin className="w-3 h-3 text-[#DC2626]" />
-                              <span>{r.lat.toFixed(4)}, {r.lng.toFixed(4)}</span>
-                            </span>
+                          {/* Accept Button with Concurrency & Compatibility Lock */}
+                          <div className="flex flex-col items-end flex-shrink-0">
                             <button
-                              onClick={() => flyToIncident(r)}
-                              className="text-blue-600 font-bold hover:underline cursor-pointer"
+                              onClick={() => handleAccept(r)}
+                              disabled={isMatched || isResolved || (!isCompatible && isBlood && donorBlood)}
+                              className={`px-3.5 py-2 rounded-xl font-black text-xs transition cursor-pointer shadow-sm flex items-center space-x-1.5 ${
+                                isResolved
+                                  ? 'bg-slate-200 text-slate-500 cursor-not-allowed shadow-none'
+                                  : isMatched
+                                  ? 'bg-emerald-100 text-emerald-800 border border-emerald-300 cursor-default shadow-none'
+                                  : (!isCompatible && isBlood && donorBlood)
+                                  ? 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed shadow-none'
+                                  : isCompatible
+                                  ? 'bg-[#DC2626] hover:bg-[#B91C1C] text-white shadow-red-500/20 active:scale-95'
+                                  : 'bg-[#2563EB] hover:bg-[#1D4ED8] text-white shadow-blue-500/20 active:scale-95'
+                              }`}
                             >
-                              View on MapLibre &rarr;
+                              {isResolved ? (
+                                <span>Resolved</span>
+                              ) : isMatched ? (
+                                <span className="flex items-center space-x-1">
+                                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                                  <span>{r.match_info?.helper_name ? `Claimed by ${r.match_info.helper_name.split('(')[0]}` : 'Claimed / Matched'}</span>
+                                </span>
+                              ) : (!isCompatible && isBlood && donorBlood) ? (
+                                <span className="flex items-center space-x-1">
+                                  <Lock className="w-3 h-3 text-slate-400" />
+                                  <span>Incompatible ({donorBlood} ⇸ {reqBlood})</span>
+                                </span>
+                              ) : (
+                                <>
+                                  <Check className="w-3.5 h-3.5" />
+                                  <span>{isCompatible ? 'Donate Blood (Accept)' : 'Accept Request'}</span>
+                                </>
+                              )}
                             </button>
                           </div>
                         </div>
-
-                        {/* Accept Button */}
-                        <div className="flex flex-col items-end flex-shrink-0">
-                          <button
-                            onClick={() => handleAccept(r)}
-                            disabled={isMatched || isResolved}
-                            className={`px-3.5 py-2 rounded-xl font-black text-xs transition cursor-pointer shadow-sm flex items-center space-x-1.5 ${
-                              isResolved
-                                ? 'bg-slate-200 text-slate-500 cursor-not-allowed'
-                                : isMatched
-                                ? 'bg-emerald-100 text-emerald-800 cursor-default'
-                                : isCompatible
-                                ? 'bg-[#DC2626] hover:bg-[#B91C1C] text-white shadow-red-500/20'
-                                : 'bg-[#2563EB] hover:bg-[#1D4ED8] text-white shadow-blue-500/20'
-                            }`}
-                          >
-                            {isResolved ? (
-                              <span>Resolved</span>
-                            ) : isMatched ? (
-                              <span>Matched</span>
-                            ) : (
-                              <>
-                                <Check className="w-3.5 h-3.5" />
-                                <span>{isCompatible ? 'Donate Blood' : 'Accept Request'}</span>
-                              </>
-                            )}
-                          </button>
-                        </div>
                       </div>
-                    </div>
-                  );
-                })}
+                    );
+                  })
+                )}
               </div>
             </div>
           )}

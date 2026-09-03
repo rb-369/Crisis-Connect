@@ -92,7 +92,7 @@ async def websocket_endpoint(websocket: WebSocket, channel_type: str, channel_id
     - /ws/admin/{any}          : admin notifications, new requests, triage changes
     - /ws/zones/{any}          : crisis zone confirmations
     """
-    channel_name = f"{channel_type}:{channel_id}" if channel_type not in ("admin", "zones") else channel_type
+    channel_name = f"{channel_type}:{channel_id}" if channel_type not in ("admin", "zones", "volunteers") else channel_type
     await ws_manager.connect(websocket, channel_name)
     try:
         # Send initial connection confirmation

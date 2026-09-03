@@ -29,6 +29,7 @@ import RequesterChat from './RequesterChat';
 import DuplicateBadge from './DuplicateBadge';
 import RequesterLiveMap from './RequesterLiveMap';
 import { getBloodGroupTheme, getCompatibleDonorsForRecipient } from '../../utils/bloodCompatibility';
+import { playMatchSuccessChime } from '../../utils/audioChime';
 
 const STATUS_STEPS = [
   { id: 'requested', label: 'Verified & Queued', desc: 'Searching compatible donors in radius', icon: Clock },
@@ -44,6 +45,7 @@ export default function LiveStatusTracker({ initialRequest, onNewRequest }) {
   const [wsStatus, setWsStatus] = useState('connecting');
   const [isPlayingAudio, setIsPlayingAudio] = useState(false);
   const [isResolving, setIsResolving] = useState(false);
+  const [matchNotification, setMatchNotification] = useState(null);
   const audioPlayerRef = useRef(null);
 
   useEffect(() => {
@@ -59,6 +61,31 @@ export default function LiveStatusTracker({ initialRequest, onNewRequest }) {
             ...prev,
             ...payload.data,
           }));
+
+          // When a volunteer/donor accepts the request, alert the user with helper details & chime!
+          if (payload.event === 'matched') {
+            const helperName = payload.data.match_info?.helper_name || payload.data.helper_name || 'Verified Volunteer Responder';
+            const helperPhone = payload.data.match_info?.helper_phone || payload.data.helper_phone;
+            const helperBlood = payload.data.match_info?.blood_group || payload.data.blood_group;
+
+            playMatchSuccessChime();
+            setMatchNotification({
+              helperName,
+              helperPhone,
+              helperBlood,
+              category: payload.data.category,
+              time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+            });
+
+            if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
+              try {
+                new Notification('CrisisConnect: Responder Matched!', {
+                  body: `${helperName} has accepted your request!`,
+                  icon: '/favicon.ico',
+                });
+              } catch (_) {}
+            }
+          }
         }
       },
       (status) => setWsStatus(status)
@@ -134,6 +161,76 @@ export default function LiveStatusTracker({ initialRequest, onNewRequest }) {
           <span>Live Link: {wsStatus}</span>
         </div>
       </div>
+
+      {/* Live Responder Acceptance Notification Modal / Banner */}
+      {matchNotification && (
+        <div className="mb-5 p-5 rounded-3xl bg-gradient-to-r from-[#0F172A] via-[#1E293B] to-[#0F172A] text-white shadow-2xl border-2 border-emerald-400 ring-4 ring-emerald-500/20 animate-in slide-in-from-top-3 duration-300">
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex items-start space-x-3.5">
+              <div className="w-12 h-12 rounded-2xl bg-emerald-500 text-white flex items-center justify-center flex-shrink-0 shadow-lg shadow-emerald-500/30">
+                <UserCheck className="w-6 h-6" />
+              </div>
+              <div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 text-[10px] font-black uppercase tracking-wider border border-emerald-500/40">
+                    🎉 Volunteer / Donor Matched & Dispatched!
+                  </span>
+                  <span className="text-[10px] text-slate-400 font-mono">
+                    {matchNotification.time}
+                  </span>
+                </div>
+                <h3 className="text-lg font-black text-white mt-1">
+                  {matchNotification.helperName}
+                </h3>
+                <p className="text-xs text-slate-300 font-medium mt-0.5">
+                  Has accepted your emergency request and is currently en route with assistance.
+                </p>
+                {matchNotification.helperBlood && (
+                  <div className="mt-2 inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-lg bg-red-500/20 border border-red-500/40 text-red-300 text-xs font-bold font-mono">
+                    <span>🩸 Donor Blood Group: {matchNotification.helperBlood}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+            <button
+              onClick={() => setMatchNotification(null)}
+              className="text-slate-400 hover:text-white p-1 cursor-pointer text-sm font-bold"
+            >
+              ✕
+            </button>
+          </div>
+
+          <div className="mt-4 pt-3 border-t border-slate-700/70 flex flex-wrap items-center justify-between gap-3">
+            {matchNotification.helperPhone && (
+              <a
+                href={`tel:${matchNotification.helperPhone}`}
+                className="text-xs font-bold text-slate-200 hover:text-white flex items-center space-x-1.5"
+              >
+                <Phone className="w-3.5 h-3.5 text-emerald-400" />
+                <span>Call Responder: {matchNotification.helperPhone}</span>
+              </a>
+            )}
+            <div className="flex items-center space-x-2">
+              <button
+                onClick={() => {
+                  setActiveTab('chat');
+                  setMatchNotification(null);
+                }}
+                className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-black shadow-md transition flex items-center space-x-1.5 cursor-pointer"
+              >
+                <MessageSquare className="w-4 h-4" />
+                <span>Open Direct Chat</span>
+              </button>
+              <button
+                onClick={() => setMatchNotification(null)}
+                className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold transition cursor-pointer"
+              >
+                Dismiss
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Dynamic Reassurance Signal Banner (Based on real-time state) */}
       {currentIndex === 0 && (

@@ -45,7 +45,9 @@ async function fetchJson(endpoint, options = {}) {
       const err = await response.json();
       errorDetail = err.detail || JSON.stringify(err);
     } catch (_) { }
-    throw new Error(`API Error [${response.status}]: ${errorDetail}`);
+    const error = new Error(errorDetail);
+    error.status = response.status;
+    throw error;
   }
 
   return response.json();

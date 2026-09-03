@@ -155,6 +155,17 @@ async def simulate_accept_request(request_id: str, helper_payload: Optional[Help
     if not req:
         raise HTTPException(status_code=404, detail="Request not found")
 
+    # Concurrency Guard: If request is already accepted by another volunteer/donor, prevent double-accept
+    if req.get("status") in ["matched", "en_route", "on_the_way", "arrived", "resolved", "completed"] or req.get("match_id"):
+        existing_match = mem_db.matches.get(req.get("match_id")) if req.get("match_id") else None
+        existing_helper = (
+            existing_match.get("helper_name")
+            if existing_match
+            else (req.get("match_info", {}).get("helper_name") if isinstance(req.get("match_info"), dict) else None)
+        )
+        msg = f"This emergency request has already been accepted by {existing_helper or 'another responder'}."
+        raise HTTPException(status_code=409, detail=msg)
+
     match_id = str(uuid.uuid4())
     
     helper_name = helper_payload.helper_name if helper_payload and helper_payload.helper_name else "Volunteer Unit Alpha (Red Cross Mumbai)"

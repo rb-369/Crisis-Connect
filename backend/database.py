@@ -118,19 +118,124 @@ class MemoryDB:
         if self.requests:
             return  # already seeded
 
-        # Helper demo (Mumbai Emergency Unit)
-        helper_id = "h-1001-vol"
-        self.helpers[helper_id] = {
-            "id": helper_id,
-            "name": "Dr. Rohit Deshmukh (Red Cross Mumbai)",
-            "phone": "+91 98201 55019",
-            "role": "volunteer",
-            "org_name": "Indian Red Cross Emergency Response Mumbai",
-            "verified": True,
-            "available": True,
-            "lat": 19.0178,
-            "lng": 72.8478, # Dadar TT
-        }
+        # Helper demo accounts (Mumbai Emergency Volunteers & NGOs)
+        dummy_helpers = [
+            {
+                "id": "VOL-1001",
+                "name": "Dr. Rohit Deshmukh",
+                "phone": "+91 98201 55019",
+                "email": "rohit.deshmukh@redcrossmumbai.org",
+                "role": "volunteer",
+                "bloodGroup": "O+",
+                "org_name": "Indian Red Cross Emergency Response Mumbai",
+                "skills": ["first_aid", "emt_paramedic", "blood_donor"],
+                "vehicleType": "4x4 SUV",
+                "verified": True,
+                "available": True,
+                "badge": "Verified First Responder",
+                "lat": 19.0178,
+                "lng": 72.8478, # Dadar TT
+            },
+            {
+                "id": "VOL-1002",
+                "name": "Vikram Joshi",
+                "phone": "+91 98201 44021",
+                "email": "vikram.joshi@bloodheroes.org",
+                "role": "volunteer",
+                "bloodGroup": "O-",
+                "org_name": "Mumbai Blood Heroes Network",
+                "skills": ["blood_donor", "first_aid"],
+                "vehicleType": "Motorcycle",
+                "verified": True,
+                "available": True,
+                "badge": "Universal Blood Donor (O-)",
+                "lat": 19.0178,
+                "lng": 72.8478,
+            },
+            {
+                "id": "VOL-1003",
+                "name": "Pooja Mehta",
+                "phone": "+91 98670 12890",
+                "email": "pooja.mehta@kemdonors.in",
+                "role": "volunteer",
+                "bloodGroup": "A+",
+                "org_name": "KEM Voluntary Donors League",
+                "skills": ["blood_donor", "shelter_host"],
+                "vehicleType": "4x4 SUV",
+                "verified": True,
+                "available": True,
+                "badge": "Registered Blood Donor (A+)",
+                "lat": 19.0028,
+                "lng": 72.8428,
+            },
+            {
+                "id": "VOL-1004",
+                "name": "Rahul Sawant",
+                "phone": "+91 98190 77654",
+                "email": "rahul.sawant@mumbaicentral.org",
+                "role": "volunteer",
+                "bloodGroup": "B+",
+                "org_name": "Mumbai Central Youth Donors",
+                "skills": ["blood_donor", "offroad_driver"],
+                "vehicleType": "Van/Mini-Truck",
+                "verified": True,
+                "available": True,
+                "badge": "Registered Blood Donor (B+)",
+                "lat": 18.9712,
+                "lng": 72.8197,
+            },
+            {
+                "id": "NGO-2001",
+                "name": "Indian Red Cross Emergency Response Mumbai",
+                "darpanId": "MH/2021/029104",
+                "phone": "022-2410-7000",
+                "email": "operations@redcrossmumbai.org",
+                "role": "ngo",
+                "domains": ["medical_camps", "oxygen_banks", "search_rescue"],
+                "fleetAmbulances": 6,
+                "fleetRescueBoats": 3,
+                "verified": True,
+                "available": True,
+                "badge": "Authorized Humanitarian Agency",
+                "lat": 19.0178,
+                "lng": 72.8478,
+            },
+            {
+                "id": "NGO-2002",
+                "name": "Dharavi Disaster Taskforce & Relief Fleet",
+                "darpanId": "MH/2020/018823",
+                "phone": "+91 98200 99881",
+                "email": "relief@dharavitaskforce.org",
+                "role": "ngo",
+                "domains": ["food_water", "evac_shelters"],
+                "fleetAmbulances": 2,
+                "fleetRescueBoats": 4,
+                "verified": True,
+                "available": True,
+                "badge": "Certified Disaster Relief Agency",
+                "lat": 19.0434,
+                "lng": 72.8567,
+            },
+            {
+                "id": "NGO-2003",
+                "name": "Khalsa Aid Mumbai Crisis Wing",
+                "darpanId": "MH/2019/044192",
+                "phone": "+91 98210 33445",
+                "email": "mumbai@khalsaaid.org",
+                "role": "ngo",
+                "domains": ["food_water", "evac_shelters", "medical_camps"],
+                "fleetAmbulances": 4,
+                "fleetRescueBoats": 2,
+                "verified": True,
+                "available": True,
+                "badge": "International Humanitarian Partner",
+                "lat": 19.0596,
+                "lng": 72.8295,
+            },
+        ]
+
+        for h in dummy_helpers:
+            self.helpers[h["id"]] = h
 
         # Confirmed Hazard Zone (Kurla-Mithi River Basin Flood Zone)
         zone_id = str(uuid.uuid4())
@@ -559,3 +664,53 @@ async def db_get_linked_count(request_id: str) -> int:
         ):
             count += 1
     return count
+
+
+# Helper / Volunteer & NGO Database Layer
+async def db_list_helpers(role: Optional[str] = None) -> List[Dict[str, Any]]:
+    items = list(mem_db.helpers.values())
+    if role:
+        items = [h for h in items if h.get("role") == role]
+    return items
+
+
+async def db_get_helper(helper_id: str) -> Optional[Dict[str, Any]]:
+    return mem_db.helpers.get(helper_id)
+
+
+async def db_create_helper(data: Dict[str, Any]) -> Dict[str, Any]:
+    helper_id = data.get("id") or f"{'VOL' if data.get('role') == 'volunteer' else 'NGO'}-{uuid.uuid4().hex[:6].upper()}"
+    full_helper = {
+        "id": helper_id,
+        "name": data.get("name"),
+        "phone": data.get("phone"),
+        "email": data.get("email"),
+        "role": data.get("role", "volunteer"),
+        "org_name": data.get("org_name"),
+        "darpanId": data.get("darpanId"),
+        "bloodGroup": data.get("bloodGroup"),
+        "skills": data.get("skills", []),
+        "domains": data.get("domains", []),
+        "verified": True,
+        "available": True,
+        "badge": data.get("badge") or ("Verified First Responder" if data.get("role") == "volunteer" else "Authorized Humanitarian Agency"),
+        "lat": float(data.get("lat", 19.0178)),
+        "lng": float(data.get("lng", 72.8478)),
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    mem_db.helpers[helper_id] = full_helper
+    return full_helper
+
+
+async def db_find_helper(query_str: str) -> Optional[Dict[str, Any]]:
+    clean = query_str.strip().lower()
+    for h in mem_db.helpers.values():
+        if (
+            (h.get("phone") and clean in h.get("phone").lower()) or
+            (h.get("email") and clean in h.get("email").lower()) or
+            (h.get("id") and clean == h.get("id").lower()) or
+            (h.get("darpanId") and clean in h.get("darpanId").lower())
+        ):
+            return h
+    return None
+

@@ -9,6 +9,7 @@ from websocket_manager import ws_manager
 from routers.requests import router as requests_router
 from routers.messages import router as messages_router
 from routers.zones import router as zones_router
+from routers.auth import router as auth_router
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("crisis_connect")
@@ -41,6 +42,8 @@ app.add_middleware(
 app.include_router(requests_router)
 app.include_router(messages_router)
 app.include_router(zones_router)
+app.include_router(auth_router)
+
 
 
 # Root & Health check

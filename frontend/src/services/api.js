@@ -94,5 +94,32 @@ export const api = {
     body: helperPayload ? JSON.stringify(helperPayload) : undefined,
   }),
 
+  // Auth & Helper Management
+  sendOtp: (contact, role = 'volunteer') => fetchJson('/auth/send-otp', {
+    method: 'POST',
+    body: JSON.stringify({ contact, role }),
+  }),
+
+  verifyOtp: (contact, otp_code, role = 'volunteer') => fetchJson('/auth/verify-otp', {
+    method: 'POST',
+    body: JSON.stringify({ contact, otp_code, role }),
+  }),
+
+  login: (identifier, role = null) => fetchJson('/auth/login', {
+    method: 'POST',
+    body: JSON.stringify({ identifier, role }),
+  }),
+
+  getHelpers: (role = null) => {
+    const query = role ? `?role=${encodeURIComponent(role)}` : '';
+    return fetchJson(`/auth/helpers${query}`);
+  },
+
+  createHelper: (helperData) => fetchJson('/auth/helpers', {
+    method: 'POST',
+    body: JSON.stringify(helperData),
+  }),
+
   reseed: () => fetchJson('/seed', { method: 'POST' }),
 };
+

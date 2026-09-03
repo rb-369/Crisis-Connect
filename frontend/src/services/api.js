@@ -6,6 +6,9 @@ function getApiBase() {
   if (import.meta.env.VITE_BACKEND_URL) {
     return import.meta.env.VITE_BACKEND_URL.replace(/\/$/, '');
   }
+  if (import.meta.env.VITE_API_BASE) {
+    return import.meta.env.VITE_API_BASE.replace(/\/$/, '');
+  }
 
   // 2. Automatic environment detection
   if (typeof window !== 'undefined') {
@@ -29,6 +32,12 @@ function getApiBase() {
 
 const API_BASE = getApiBase();
 
+function qs(params) {
+  const entries = Object.entries(params).filter(([, v]) => v !== undefined && v !== null && v !== '');
+  if (!entries.length) return '';
+  return '?' + new URLSearchParams(entries).toString();
+}
+
 async function fetchJson(endpoint, options = {}) {
   const url = `${API_BASE}${endpoint}`;
   const response = await fetch(url, {
@@ -41,15 +50,18 @@ async function fetchJson(endpoint, options = {}) {
 
   if (!response.ok) {
     let errorDetail = response.statusText;
+    let parsed = null;
     try {
-      const err = await response.json();
-      errorDetail = err.detail || JSON.stringify(err);
+      parsed = await response.json();
+      errorDetail = parsed.detail || JSON.stringify(parsed);
     } catch (_) { }
-    const error = new Error(errorDetail);
+    const error = new Error(`API Error [${response.status}]: ${errorDetail}`);
     error.status = response.status;
+    error.body = parsed;
     throw error;
   }
 
+  if (response.status === 204) return null;
   return response.json();
 }
 
@@ -67,9 +79,36 @@ export const api = {
 
   getRequest: (id) => fetchJson(`/requests/${id}`),
 
+  getNearbyRequests: (lat, lng, radiusM) =>
+    fetchJson(`/requests/nearby${qs({ lat, lng, radius_m: radiusM })}`),
+
   patchRequest: (id, updates) => fetchJson(`/requests/${id}`, {
     method: 'PATCH',
     body: JSON.stringify(updates),
+  }),
+
+  enrichRequest: (id, updates) => fetchJson(`/requests/${id}/enrich`, {
+    method: 'PATCH',
+    body: JSON.stringify(updates),
+  }),
+
+  // Atomic accept
+  acceptRequest: (requestId, helperId) => fetchJson(`/requests/${requestId}/accept`, {
+    method: 'POST',
+    body: JSON.stringify({ helper_id: helperId }),
+  }),
+
+  simulateAccept: (requestId, helperPayload = null) => fetchJson(`/requests/${requestId}/accept`, {
+    method: 'POST',
+    body: helperPayload ? JSON.stringify(helperPayload) : undefined,
+  }),
+
+  // Matches
+  getMatch: (id) => fetchJson(`/matches/${id}`),
+  getMatchForRequest: (requestId) => fetchJson(`/requests/${requestId}/match`),
+  patchMatchStatus: (matchId, status) => fetchJson(`/matches/${matchId}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ status }),
   }),
 
   // Chat Messages
@@ -90,11 +129,24 @@ export const api = {
 
   getSachetAlerts: () => fetchJson('/sachet-alerts'),
 
-  // Simulation & Integration Helper (Dev A test suite & Volunteer matching)
-  simulateAccept: (requestId, helperPayload = null) => fetchJson(`/requests/${requestId}/accept`, {
+  // PRD Flow E -- stale request handling & reopen
+  keepAliveRequest: (id) => fetchJson(`/requests/${id}/keepalive`, { method: 'POST' }),
+  resolveRequest: (id) => fetchJson(`/requests/${id}/resolve`, { method: 'POST' }),
+  reopenRequest: (id, reason) => fetchJson(`/requests/${id}/reopen`, {
     method: 'POST',
-    body: helperPayload ? JSON.stringify(helperPayload) : undefined,
+    body: JSON.stringify(reason ? { reason } : {}),
   }),
+  compatibleDonors: (requestId) => fetchJson(`/requests/${requestId}/compatible-donors`),
+
+  // Critical SOS / Incidents
+  createSos: (data) => fetchJson('/sos', { method: 'POST', body: JSON.stringify(data) }),
+  getIncident: (id) => fetchJson(`/incidents/${id}`),
+  getIncidents: (status) => fetchJson(`/incidents${qs({ status })}`),
+  patchIncident: (id, updates) => fetchJson(`/incidents/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(updates),
+  }),
+  getTimeline: (id) => fetchJson(`/incidents/${id}/timeline`),
 
   // Auth & Helper Management
   sendOtp: (contact, role = 'volunteer') => fetchJson('/auth/send-otp', {
@@ -105,6 +157,16 @@ export const api = {
   verifyOtp: (contact, otp_code, role = 'volunteer') => fetchJson('/auth/verify-otp', {
     method: 'POST',
     body: JSON.stringify({ contact, otp_code, role }),
+  }),
+
+  verifyOtpV2: (contact, otpCode, role) => fetchJson('/auth/verify-otp', {
+    method: 'POST',
+    body: JSON.stringify({ contact, otp_code: otpCode, ...(role ? { role } : {}) }),
+  }),
+
+  requestOtp: (phone, name) => fetchJson('/auth/request-otp', {
+    method: 'POST',
+    body: JSON.stringify({ phone, role: 'volunteer', ...(name ? { name } : {}) }),
   }),
 
   login: (identifier, role = null) => fetchJson('/auth/login', {
@@ -122,6 +184,24 @@ export const api = {
     body: JSON.stringify(helperData),
   }),
 
-  reseed: () => fetchJson('/seed', { method: 'POST' }),
-};
+  patchHelper: (id, updates) => fetchJson(`/helpers/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(updates),
+  }),
 
+  getMe: (token) => fetchJson('/auth/me', {
+    headers: { Authorization: `Bearer ${token}` },
+  }),
+
+  addDeviceToken: (helperId, platform, token) => fetchJson(`/helpers/${helperId}/device-tokens`, {
+    method: 'POST',
+    body: JSON.stringify({ platform, token }),
+  }),
+
+  getHelperMatches: (helperId, status) =>
+    fetchJson(`/helpers/${helperId}/matches${qs({ status })}`),
+
+  // Demo Reseed
+  reseed: () => fetchJson('/seed', { method: 'POST' }),
+  reseedDemo: () => fetchJson('/debug/reseed-demo', { method: 'POST' }),
+};

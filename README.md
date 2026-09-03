@@ -1,101 +1,148 @@
-# CrisisConnect — Rapid Emergency Response & Aid Coordination
+# CrisisConnect — Emergency Assistance & Disaster Coordination Platform
 
-A real-time emergency response platform built with **FastAPI**, **Native WebSockets**, **Supabase (PostgreSQL)**, and **React (Vite + Tailwind CSS)**.
-
----
-
-## 🌟 Tech Stack
-
-- **Backend:** FastAPI (Python), Native WebSockets, Pydantic, Uvicorn
-- **Database:** Supabase (PostgreSQL with `cube` and `earthdistance` extensions)
-- **Frontend:** React 18, Vite 5, Tailwind CSS 3, Lucide Icons, Leaflet GIS Maps
+CrisisConnect is a full-stack, real-time emergency coordination platform designed for rapid crisis response. It pairs a **1-tap citizen SOS interface** with an **NGO dispatch & triage mission control**, an **in-browser Tesseract OCR prescription verification engine**, **MapLibre GL JS vector maps with OSRM road shortest-path navigation**, **blood donor compatibility matching**, and a **high-concurrency FastAPI + PostgreSQL (Supabase) backend** with native WebSockets.
 
 ---
 
-## 🚀 Key Features
+## 🌟 Key Capabilities
 
-1. **1-Tap Emergency Report (Requester Step 1)**:
-   - 7 emergency categories (`Blood`, `Food & Water`, `Medicines`, `Oxygen Tank`, `Emergency Shelter`, `Evac Transport`, `Active Rescue`).
-   - Auto-urgency promotion for Oxygen & Rescue requests.
-   - Browser GPS auto-capture with manual pin-drop fallback.
-2. **Optional Enrichment Form (Step 2)**:
-   - Attach contact name, phone number, notes, and photo.
-   - 1-click **Skip Form** button so responders are never delayed.
-3. **Live Status Pipeline (Step 3)**:
-   - Real-time status tracker (`Requested` ➔ `Matched` ➔ `In Progress` ➔ `Resolved`) updated via native WebSockets.
-4. **Direct Responders Chat (Step 7)**:
-   - In-app WebSocket chat channel for direct communication with matched volunteers.
-5. **Duplicate / Linked Request Alert (Step 8)**:
-   - Detects clustered emergency requests (< 300m radius) and surfaces *"N others nearby also need this"*.
-6. **NGO / Dispatch Admin Dashboard**:
-   - Triage queue prioritized by urgency (`HIGH URGENCY` at top) then recency.
-   - Quick action buttons to `Approve`, `Flag`, or `Reject` requests.
-7. **Admin Crisis GIS Map**:
-   - Interactive Leaflet map displaying active category-coded pins and confirmed crisis hazard perimeters.
-8. **Public Crowdsourced Hazard Pin-Drop**:
-   - Public hazard reporting screen requiring zero login.
-   - Automatic 3-report cluster threshold detection declaring a confirmed crisis zone.
-9. **Volunteer Mobile Simulator**:
-   - In-app simulator for testing volunteer accepts, status transitions, and two-way chat.
+### 🚨 Citizen Emergency Reporting (Web PWA)
+- **1-Tap Master Distress Beacon & Critical SOS**: Instant 1-tap dispatch with browser GPS capture (`Fire`, `Flood`, `Earthquake`, `Accident`, `Rescue / Trapped`), grouping into real-time incidents with timeline tracking.
+- **Structured Non-Critical Assistance**: Category-specific request flow for `Blood`, `Oxygen`, `Medicine`, `Food & Water`, `Shelter`, and `Transport`.
+- **In-Browser Tesseract OCR Verification**: Zero-server prescription scanning for oxygen and medicine requests with confidence scoring, doctor info extraction, and medicine auto-parsing.
+- **Voice Note Recording**: Web Audio voice memos attached directly to emergency requests.
+- **Live Status Tracker & Road Routing**: MapLibre GL JS live tracking map displaying shortest road paths via OSRM, assigned responder cards, Web Audio emergency chimes, and live responder chat.
+
+### 🛡️ Mission Control & NGO Dispatch
+- **Urgency & Recency Triage Queue**: Real-time triage with life-threatening priority badges, blood group requirements, OCR verification tags, voice note audio player, and instant triage actions (`Approve`, `Reject`, `Flag`, `Expire`).
+- **Interactive GIS Hazard Map**: MapLibre GL JS vector map plotting emergency pins, NDMA Sachet hazard polygons, confirmed crisis perimeters, and 1-tap map accept.
+- **Multi-Step 2FA Authentication & Dummy Accounts**: Quick role-based login (`Volunteer` vs `NGO Agency`) with 2FA OTP simulation, registration, and persistent session state.
+
+### ⚡ Volunteer & Blood Donor Simulation
+- **Multi-Profile Radar**: Switch between Universal Donors (`O-`, `A+`, `B+`) and NGO Response Units (`Red Cross Mumbai`).
+- **Blood Compatibility Matching**: Real-time recipient/donor compatibility matrix (`O-` universal, `AB+` universal recipient).
+- **Atomic Concurrency Protection**: High-concurrency first-accept-wins locks preventing double-assignment races (`409 Conflict Guard`).
+
+### ⚙️ Production-Grade Backend Engine
+- **FastAPI + asyncpg + PostgreSQL (Supabase)**: Modular router architecture with connection pooling and PostgreSQL extensions (`cube`, `earthdistance`).
+- **Automated 3-Stage Verification Pipeline**: Rule-based verification on request creation (`Duplicate check` ➔ `Completeness check` ➔ `Evidence / Phone / Video check`).
+- **Dual WebSocket Protocol**: Supports both multiplexed (`/ws?channels=...`) and path-based (`/ws/{channel_type}/{channel_id}`) clients with dual-key JSON envelopes (`payload` + `data`).
+- **Background Stale Request Expiry**: Automatic sweep marking unmatched requests as expired after 45 minutes.
 
 ---
 
-## 🛠️ Project Structure
+## 🛠️ Architecture & Project Structure
 
 ```
 Crisis-Connect/
 ├── backend/
-│   ├── main.py                 # FastAPI app & native WebSocket handler
-│   ├── config.py               # Env configuration
-│   ├── database.py             # Supabase & memory database layer
-│   ├── websocket_manager.py    # Channel room WebSocket manager
-│   ├── schema.sql              # Shared PostgreSQL DDL schema
-│   ├── test_backend.py         # Backend acceptance test suite
-│   └── routers/
-│       ├── requests.py         # Emergency requests CRUD
-│       ├── messages.py         # Direct chat messages
-│       └── zones.py            # Public zone reports & confirmed zones
+│   ├── main.py                 # Root FastAPI entrypoint (uvicorn main:app)
+│   ├── schema.sql              # PostgreSQL DDL schema with extensions & indexes
+│   ├── requirements.txt        # Python backend dependencies
+│   ├── test_backend.py         # End-to-end API & concurrency test suite
+│   ├── app/                    # Modular FastAPI core
+│   │   ├── config.py           # Environment variables & constants
+│   │   ├── db.py               # asyncpg database connection pool
+│   │   ├── schemas.py          # Pydantic validation models & field aliases
+│   │   ├── verification.py     # 3-stage verification pipeline
+│   │   ├── incident_status.py  # Monotonic incident status advancement
+│   │   ├── blood.py            # Blood donor compatibility matrix
+│   │   ├── expiry.py           # Background sweep for stale requests
+│   │   ├── ws.py               # High-concurrency WebSocket ConnectionManager
+│   │   ├── auth.py             # JWT issuance & validation
+│   │   ├── demo_seed.py        # Mumbai disaster scenario seeder
+│   │   └── routers/            # Modular endpoint routers
+│   │       ├── requests.py     # Requests CRUD, enrich, atomic accept, blood matching
+│   │       ├── auth.py         # 2FA OTP, login, helper registration
+│   │       ├── sos.py          # 1-tap SOS distress beacon
+│   │       ├── incidents.py    # Incident clustering, timeline, assessment
+│   │       ├── matches.py      # Match status transitions
+│   │       ├── messages.py     # Direct match chat messages
+│   │       ├── zones.py        # Public zone reports & NDMA Sachet alerts
+│   │       └── helpers.py      # Helper profile & availability management
+│   └── tests/                  # Complete pytest & concurrency race test suites
 │
-└── frontend/
-    ├── index.html
-    ├── vite.config.js
-    ├── tailwind.config.js
-    └── src/
-        ├── App.jsx             # Main App layout & tab routing
-        ├── services/           # REST API & WebSocket clients
-        ├── utils/              # Persistent device UUID helper
-        └── components/         # Requester, Admin, Map, Zone & Sim components
+├── frontend/
+│   ├── index.html
+│   ├── package.json
+│   ├── vite.config.js
+│   ├── tailwind.config.js
+│   └── src/
+│       ├── App.jsx             # Main application shell with mode switching
+│       ├── index.css           # Mission control daylight styling & animations
+│       ├── services/
+│       │   ├── api.js          # Environment-adaptive REST API client
+│       │   ├── websocket.js    # Resilient auto-reconnecting WebSocket client
+│       │   └── ocrService.js   # Tesseract.js client-side OCR engine
+│       ├── utils/
+│       │   ├── prescriptionParser.js # Doctor & prescription entity parser
+│       │   ├── routeUtils.js         # OSRM road shortest route calculator
+│       │   ├── audioChime.js         # Web Audio API alert chimes
+│       │   ├── bloodCompatibility.js # Universal blood compatibility rules
+│       │   ├── device.js             # Device UUID persistence
+│       │   └── offlineSos.js         # Offline distress sync
+│       └── components/
+│           ├── Header.jsx            # Top callout header with role switcher
+│           ├── Requester/            # InstantReport, NonCriticalModal, LiveStatusTracker, RequesterLiveMap
+│           ├── Critical/             # SosButton, SosStatusView
+│           ├── Admin/                # AdminDashboard, AdminMap
+│           ├── Simulation/           # VolunteerMock radar & route visualizer
+│           ├── Auth/                 # MultiStepAuthModal
+│           └── ZoneReport/           # Public crowdsourced pin-drop
+│
+├── docs/                       # Complete PRDs, contracts & design specs
+└── render.yaml                 # 1-Click Render cloud deployment blueprint
 ```
 
 ---
 
-## ⚙️ Quick Start
+## 🚀 Quick Start
 
-### 1. Database Setup (Supabase)
-Run the SQL DDL script in `backend/schema.sql` inside your **Supabase SQL Editor**.
+### 1. Database Setup (Supabase / PostgreSQL)
+Execute `backend/schema.sql` in your Supabase SQL Editor or local PostgreSQL instance.
 
-### 2. Environment Variables
-Create a `.env` file in the project root or in `backend/`:
-
-```env
-SUPABASE_URL=https://your-project.supabase.co
-SUPABASE_KEY=your-anon-or-service-role-key
-PORT=8000
-```
-
-### 3. Run Backend
+### 2. Run Backend
 ```bash
 cd backend
-python -m pip install -r requirements.txt
-python -m uvicorn main:app --host 0.0.0.0 --port 8000
+pip install -r requirements.txt
+python main.py
 ```
 - API Docs: `http://localhost:8000/docs`
-- Native WebSocket endpoint: `ws://localhost:8000/ws/{channel_type}/{channel_id}`
+- Health Check: `http://localhost:8000/health`
+- Reseed Demo Scenarios: `POST http://localhost:8000/seed`
 
-### 4. Run Frontend
+### 3. Run Frontend
 ```bash
 cd frontend
 npm install
 npm run dev
 ```
-- Open `http://localhost:5173/` in your browser.
+- Open `http://localhost:5173` in your browser.
+
+---
+
+## 🧪 Testing & Verification
+
+### Run Dev A API Test Suite:
+```bash
+cd backend
+python test_backend.py
+```
+
+### Run Pytest Test Suite:
+```bash
+cd backend
+PYTHONPATH=. pytest
+```
+
+### Run Concurrency & Race Condition Suite:
+```bash
+cd backend
+bash tests/run_all.sh
+```
+
+---
+
+## 🌐 Cloud Deployment (Render & Vercel)
+- The repo includes `render.yaml` for 1-click deployment on Render (FastAPI Web Service + React Static Site).
+- The frontend dynamically auto-detects `localhost`, LAN IP, or Render backend `https://crisis-connect-m6da.onrender.com`.

@@ -3,6 +3,7 @@ import Header from './components/Header';
 import InstantReport from './components/Requester/InstantReport';
 import EnrichmentForm from './components/Requester/EnrichmentForm';
 import LiveStatusTracker from './components/Requester/LiveStatusTracker';
+import SosStatusView from './components/Critical/SosStatusView';
 import AdminDashboard from './components/Admin/AdminDashboard';
 import AdminMap from './components/Admin/AdminMap';
 import ZoneReportScreen from './components/ZoneReport/ZoneReportScreen';
@@ -52,8 +53,8 @@ export default function App() {
 
   const handleRequestCreated = (newReq) => {
     setActiveRequest(newReq);
-    // If it's a blood request with complete details, advance directly to live status tracker
-    if (newReq.category === 'blood' && newReq.service_details?.blood_group) {
+    // If it's a critical SOS or blood request with complete details, advance directly to live status tracker
+    if (newReq.__sos || (newReq.category === 'blood' && newReq.service_details?.blood_group)) {
       setRequesterStep('status');
     } else {
       setRequesterStep('enrichment');
@@ -143,10 +144,17 @@ export default function App() {
             )}
 
             {requesterStep === 'status' && activeRequest && (
-              <LiveStatusTracker
-                initialRequest={activeRequest}
-                onNewRequest={handleStartNewRequest}
-              />
+              activeRequest.__sos ? (
+                <SosStatusView
+                  result={activeRequest}
+                  onReturnHome={handleStartNewRequest}
+                />
+              ) : (
+                <LiveStatusTracker
+                  initialRequest={activeRequest}
+                  onNewRequest={handleStartNewRequest}
+                />
+              )
             )}
           </div>
         )}

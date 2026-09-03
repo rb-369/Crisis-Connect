@@ -161,7 +161,7 @@ export default function AdminDashboard({ onOpenMap, currentUser, onOpenAuthModal
       )}
 
       {/* Filter Tabs */}
-      <div className="flex items-center space-x-2 overflow-x-auto pb-2 mb-5 border-b border-[#CBD5E1]">
+      <div className="flex flex-wrap items-center gap-2 mb-5 border-b border-[#CBD5E1] pb-3">
         {[
           { id: '', label: 'All Requests' },
           { id: 'pending', label: 'Pending Review' },
@@ -172,10 +172,10 @@ export default function AdminDashboard({ onOpenMap, currentUser, onOpenAuthModal
           <button
             key={tab.id}
             onClick={() => setStatusFilter(tab.id)}
-            className={`px-3.5 py-2 rounded-xl text-xs font-bold transition whitespace-nowrap ${
+            className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition whitespace-nowrap cursor-pointer ${
               statusFilter === tab.id
                 ? 'bg-[#0F172A] text-white shadow-sm'
-                : 'text-[#64748B] hover:text-[#0F172A] bg-white border border-[#E2E8F0] hover:bg-[#F1F5F9]'
+                : 'text-[#64748B] hover:text-[#0F172A] bg-white border border-[#CBD5E1] hover:bg-[#F1F5F9]'
             }`}
           >
             {tab.label}
@@ -199,6 +199,7 @@ export default function AdminDashboard({ onOpenMap, currentUser, onOpenAuthModal
         <div className="space-y-3.5">
           {requests.map((req) => {
             const isHigh = req.urgency === 'high';
+            const bloodGroup = req.service_details?.blood_group;
 
             return (
               <div
@@ -206,7 +207,7 @@ export default function AdminDashboard({ onOpenMap, currentUser, onOpenAuthModal
                 className={`p-5 rounded-2xl bg-white border transition-all shadow-sm ${
                   isHigh
                     ? 'border-[#FECACA] ring-1 ring-[#DC2626]/20 bg-gradient-to-r from-[#FEF2F2]/60 to-white'
-                    : 'border-[#E2E8F0] hover:border-[#CBD5E1]'
+                    : 'border-[#CBD5E1] hover:border-[#94A3B8]'
                 }`}
               >
                 <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
@@ -217,6 +218,12 @@ export default function AdminDashboard({ onOpenMap, currentUser, onOpenAuthModal
                       <span className="px-2.5 py-1 rounded-lg text-xs font-black uppercase tracking-wider bg-[#0F172A] text-white">
                         {req.category}
                       </span>
+
+                      {bloodGroup && (
+                        <span className="px-2.5 py-1 rounded-lg text-xs font-black bg-red-600 text-white font-mono flex items-center space-x-1">
+                          <span>🩸 Blood: {bloodGroup} ({req.service_details?.units || 2} Units)</span>
+                        </span>
+                      )}
 
                       {/* Life-Threatening Priority Badge */}
                       {isHigh && (
@@ -239,27 +246,39 @@ export default function AdminDashboard({ onOpenMap, currentUser, onOpenAuthModal
                         Admin: {req.admin_status}
                       </span>
 
-                      {/* ML Corroboration Badge */}
-                      {req.ml_status && (
-                        <span className="px-2 py-0.5 rounded-lg text-[10px] font-bold uppercase tracking-wider bg-[#EDE9FE] text-[#6D28D9] border border-[#DDD6FE] flex items-center space-x-1">
-                          <Sparkles className="w-3 h-3" />
-                          <span>ML Corroborated</span>
-                        </span>
-                      )}
-
-                      {/* Org-Verified Badge */}
-                      <span className="px-2 py-0.5 rounded-lg text-[10px] font-bold uppercase tracking-wider bg-[#E0F2FE] text-[#0284C7] border border-[#BAE6FD] flex items-center space-x-1">
-                        <ShieldCheck className="w-3 h-3" />
-                        <span>Org-Verified</span>
-                      </span>
-
                       {/* Step 8 Duplicate Indicator */}
                       <DuplicateBadge linkedCount={req.linked_count} />
                     </div>
 
                     <p className="text-sm font-bold text-[#0F172A] leading-snug">
-                      {req.details || '1-Tap Emergency SOS (No additional text note attached)'}
+                      {req.details || 'Emergency Assistance Request'}
                     </p>
+
+                    {/* Specific details */}
+                    {req.service_details && (
+                      <div className="p-2.5 rounded-xl bg-[#F8FAFC] border border-[#E2E8F0] text-xs text-[#475569] space-y-0.5">
+                        {req.service_details.hospital_name && (
+                          <p><strong>Hospital / Clinic:</strong> {req.service_details.hospital_name}</p>
+                        )}
+                        {req.service_details.oxygen_type && (
+                          <p><strong>Oxygen Specs:</strong> {req.service_details.oxygen_type} ({req.service_details.flow_rate})</p>
+                        )}
+                        {req.service_details.medicine_names && (
+                          <p><strong>Medicines:</strong> {req.service_details.medicine_names} ({req.service_details.dosage})</p>
+                        )}
+                        {req.service_details.persons_count && (
+                          <p><strong>Persons:</strong> {req.service_details.persons_count} displaced individuals</p>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Voice Note Audio Preview for Dispatch Officers */}
+                    {req.voice_note_url && (
+                      <div className="mt-1.5 p-2 rounded-xl bg-blue-50 border border-blue-200 flex items-center space-x-3 w-fit">
+                        <audio controls src={req.voice_note_url} className="h-7 max-w-[240px]" />
+                        <span className="text-[11px] font-bold text-blue-800">Requester Voice Memo</span>
+                      </div>
+                    )}
 
                     <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-[#64748B] font-medium pt-0.5">
                       {req.requester_name && (

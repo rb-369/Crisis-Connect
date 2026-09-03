@@ -88,9 +88,10 @@ export const api = {
 
   getSachetAlerts: () => fetchJson('/sachet-alerts'),
 
-  // Simulation & Integration Helper (Dev A test suite)
-  simulateAccept: (requestId) => fetchJson(`/requests/${requestId}/accept`, {
+  // Simulation & Integration Helper (Dev A test suite & Volunteer matching)
+  simulateAccept: (requestId, helperPayload = null) => fetchJson(`/requests/${requestId}/accept`, {
     method: 'POST',
+    body: helperPayload ? JSON.stringify(helperPayload) : undefined,
   }),
 
   reseed: () => fetchJson('/seed', { method: 'POST' }),

@@ -19,18 +19,19 @@ import {
 } from 'lucide-react';
 import { getDeviceId } from '../../utils/device';
 import { api } from '../../services/api';
+import NonCriticalRequestModal from './NonCriticalRequestModal';
 
 const CATEGORIES = [
   {
-    id: 'rescue',
-    label: 'Rescue / Trapped',
-    icon: LifeBuoy,
-    iconColor: '#991B1B',
-    bgColor: '#FEE2E2',
-    borderColor: '#FECACA',
+    id: 'blood',
+    label: 'Blood Aid / Plasma',
+    icon: HeartHandshake,
+    iconColor: '#DC2626',
+    bgColor: '#FFE4E6',
+    borderColor: '#FECDD3',
     defaultUrgency: 'high',
-    desc: 'Life-critical hazard: trapped in floodwaters or collapsed building',
-    isLifeCritical: true,
+    desc: 'Urgent matching blood bags / plasma. Mandatory blood group matching.',
+    isNonCritical: true,
   },
   {
     id: 'oxygen',
@@ -40,18 +41,8 @@ const CATEGORIES = [
     bgColor: '#CFFAFE',
     borderColor: '#A5F3FC',
     defaultUrgency: 'high',
-    desc: 'Medical emergency: power cut, patient requires cylinder or concentrator',
-    isLifeCritical: true,
-  },
-  {
-    id: 'blood',
-    label: 'Blood Aid / Plasma',
-    icon: HeartHandshake,
-    iconColor: '#DC2626',
-    bgColor: '#FFE4E6',
-    borderColor: '#FECDD3',
-    defaultUrgency: 'normal',
-    desc: 'Urgent plasma / matching blood bags for emergency transfusion',
+    desc: 'Medical emergency: cylinder (10L Jumbo/Portable) or concentrator supply',
+    isNonCritical: true,
   },
   {
     id: 'medicine',
@@ -61,7 +52,8 @@ const CATEGORIES = [
     bgColor: '#DBEAFE',
     borderColor: '#BFDBFE',
     defaultUrgency: 'normal',
-    desc: 'Critical insulin, asthma inhalers, sterile bandages & supplies',
+    desc: 'Critical insulin, inhalers, cardiac meds, or doctor prescription delivery',
+    isNonCritical: true,
   },
   {
     id: 'food',
@@ -71,7 +63,8 @@ const CATEGORIES = [
     bgColor: '#FEF3C7',
     borderColor: '#FDE68A',
     defaultUrgency: 'normal',
-    desc: 'Clean drinking water cans, infant formula, or ready-to-eat rations',
+    desc: 'Clean 20L water cans, infant formula, ready-to-eat ration packets',
+    isNonCritical: true,
   },
   {
     id: 'shelter',
@@ -82,6 +75,7 @@ const CATEGORIES = [
     borderColor: '#DDD6FE',
     defaultUrgency: 'normal',
     desc: 'Displaced residents needing safe dry roof, warm bedding, evacuation base',
+    isNonCritical: true,
   },
   {
     id: 'transport',
@@ -91,7 +85,19 @@ const CATEGORIES = [
     bgColor: '#CCFBF1',
     borderColor: '#99F6E4',
     defaultUrgency: 'normal',
-    desc: 'Ambulance transfer, high-clearance 4x4, rescue boat transit',
+    desc: 'Ambulance transfer, wheelchair transit, high-clearance flood vehicle',
+    isNonCritical: true,
+  },
+  {
+    id: 'rescue',
+    label: 'Rescue / Trapped',
+    icon: LifeBuoy,
+    iconColor: '#991B1B',
+    bgColor: '#FEE2E2',
+    borderColor: '#FECACA',
+    defaultUrgency: 'high',
+    desc: 'Life-critical hazard: trapped in floodwaters or collapsed structure',
+    isLifeCritical: true,
   },
 ];
 
@@ -103,6 +109,9 @@ export default function InstantReport({ onRequestCreated }) {
   const [selectedCategory, setSelectedCategory] = useState(null);
   const [errorMessage, setErrorMessage] = useState(null);
   const [showManualCoords, setShowManualCoords] = useState(false);
+
+  // Non-Critical Interactive Modal State
+  const [activeModalCategory, setActiveModalCategory] = useState(null);
 
   // Auto-capture GPS on mount
   useEffect(() => {
@@ -142,6 +151,7 @@ export default function InstantReport({ onRequestCreated }) {
       lng: coords.lng,
       requester_device_id: deviceId,
       details: '🚨 MASTER EMERGENCY SOS TRIGGERED: Immediate rescue & multi-service emergency assistance required.',
+      is_critical: true,
     };
 
     try {
@@ -156,22 +166,32 @@ export default function InstantReport({ onRequestCreated }) {
   };
 
   // Specific Category Click Handler
-  const handleCategorySubmit = async (categoryObj) => {
+  const handleCategoryClick = (categoryObj) => {
+    // If it's a non-critical relief request, open fast detail modal (Blood, Oxygen, Meds, etc.)
+    if (categoryObj.id !== 'rescue') {
+      setActiveModalCategory(categoryObj.id);
+      return;
+    }
+
+    // Otherwise if it's life-critical Rescue, dispatch 1-tap SOS immediately
+    handleCriticalRescueSubmit();
+  };
+
+  const handleCriticalRescueSubmit = async () => {
     setIsSubmitting(true);
-    setSubmittingType(categoryObj.id);
-    setSelectedCategory(categoryObj.id);
+    setSubmittingType('rescue');
+    setSelectedCategory('rescue');
     setErrorMessage(null);
 
     const deviceId = getDeviceId();
-    const isAutoHigh = categoryObj.defaultUrgency === 'high';
-    const urgency = isAutoHigh ? 'high' : 'normal';
-
     const payload = {
-      category: categoryObj.id,
-      urgency: urgency,
+      category: 'rescue',
+      urgency: 'high',
       lat: coords.lat,
       lng: coords.lng,
       requester_device_id: deviceId,
+      details: '🚨 CRITICAL RESCUE DISPATCH: Trapped persons reported needing immediate water rescue.',
+      is_critical: true,
     };
 
     try {
@@ -371,7 +391,7 @@ export default function InstantReport({ onRequestCreated }) {
             <button
               key={cat.id}
               disabled={isSubmitting}
-              onClick={() => handleCategorySubmit(cat)}
+              onClick={() => handleCategoryClick(cat)}
               style={{
                 backgroundColor: cat.bgColor,
                 borderColor: cat.borderColor,
@@ -380,7 +400,7 @@ export default function InstantReport({ onRequestCreated }) {
                 isSelected ? 'ring-4 ring-[#DC2626]' : ''
               }`}
             >
-              {/* Top Row: Icon and Life-Critical Badge */}
+              {/* Top Row: Icon and Badges */}
               <div className="flex items-start justify-between gap-2">
                 <div 
                   style={{ backgroundColor: 'white', color: cat.iconColor }}
@@ -389,10 +409,14 @@ export default function InstantReport({ onRequestCreated }) {
                   <Icon className="w-5 h-5" />
                 </div>
 
-                {cat.isLifeCritical && (
+                {cat.isLifeCritical ? (
                   <span className="px-2 py-0.5 rounded-full bg-[#DC2626] text-white text-[10px] font-extrabold uppercase tracking-wider flex items-center space-x-1 shadow-sm">
                     <span className="w-1.5 h-1.5 rounded-full bg-white animate-ping" />
-                    <span>Immediate</span>
+                    <span>Critical 1-Tap</span>
+                  </span>
+                ) : (
+                  <span className="px-2 py-0.5 rounded-full bg-white/80 text-[#475569] text-[10px] font-bold uppercase tracking-wider border border-black/5 shadow-2xs">
+                    {cat.id === 'blood' ? '🩸 Mandatory Blood Type' : 'Non-Critical'}
                   </span>
                 )}
               </div>
@@ -419,6 +443,19 @@ export default function InstantReport({ onRequestCreated }) {
           <div className="w-5 h-5 border-3 border-[#DC2626] border-t-transparent rounded-full animate-spin" />
           <span>Dispatching emergency distress beacon to volunteer radar...</span>
         </div>
+      )}
+
+      {/* Non-Critical Interactive Fast Form Modal */}
+      {activeModalCategory && (
+        <NonCriticalRequestModal
+          category={activeModalCategory}
+          coords={coords}
+          onClose={() => setActiveModalCategory(null)}
+          onRequestCreated={(created) => {
+            setActiveModalCategory(null);
+            onRequestCreated(created);
+          }}
+        />
       )}
     </div>
   );

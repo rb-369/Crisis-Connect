@@ -26,24 +26,41 @@ class RequestCreate(BaseModel):
     requester_phone: Optional[str] = None
     details: Optional[str] = None
     photo_url: Optional[str] = None
-    admin_status: Optional[str] = "pending"
+    voice_note_url: Optional[str] = None
+    service_details: Optional[Dict[str, Any]] = None
+    admin_status: Optional[str] = "approved"
     linked_request_id: Optional[str] = None
+    is_critical: Optional[bool] = False
 
 
 class RequestUpdate(BaseModel):
     admin_status: Optional[str] = None  # pending, approved, rejected, flagged
-    status: Optional[str] = None        # requested, matched, in_progress, resolved, expired
+    status: Optional[str] = None        # requested, matched, en_route, on_the_way, arrived, resolved, expired
     requester_name: Optional[str] = None
     requester_phone: Optional[str] = None
     details: Optional[str] = None
     photo_url: Optional[str] = None
+    voice_note_url: Optional[str] = None
+    service_details: Optional[Dict[str, Any]] = None
     zone_confirmed: Optional[bool] = None
+
+
+class HelperAcceptPayload(BaseModel):
+    helper_id: Optional[str] = "h-1001-vol"
+    helper_name: Optional[str] = "Volunteer Unit Alpha (Red Cross Mumbai)"
+    helper_phone: Optional[str] = "+91 98201 55019"
+    helper_role: Optional[str] = "volunteer"
+    blood_group: Optional[str] = None
+    helper_lat: Optional[float] = None
+    helper_lng: Optional[float] = None
 
 
 @router.post("", status_code=201)
 async def create_request(payload: RequestCreate):
     """
     Step 1 & 2: Create a crisis request.
+    Supports Non-Critical Emergency requests (Blood, Oxygen, Meds, Food, Shelter, Transport)
+    with service_details, voice notes, and media.
     Auto-promotes oxygen and rescue to high urgency.
     Broadcasts 'new_request' event over WebSocket across all channels.
     """
@@ -61,6 +78,21 @@ async def create_request(payload: RequestCreate):
     await ws_manager.broadcast_all("new_request", created)
 
     return created
+
+
+@router.post("/reseed")
+async def reseed_database():
+    """Reset and re-populate fresh Mumbai non-critical and critical emergency scenarios"""
+    mem_db.requests.clear()
+    mem_db.matches.clear()
+    mem_db.messages.clear()
+    mem_db.zone_reports.clear()
+    mem_db.confirmed_zones.clear()
+    mem_db.seed_default_data()
+    
+    # Broadcast reset
+    await ws_manager.broadcast_all("reseeded", {"status": "ok"})
+    return {"status": "reseeded", "requests_count": len(mem_db.requests)}
 
 
 @router.get("")
@@ -88,7 +120,8 @@ async def get_request(request_id: str):
 async def update_request(request_id: str, payload: RequestUpdate):
     """
     Step 1 & 3 & 4: Update request.
-    Supports admin triage (approve/reject/flag) and Step 3 optional enrichment.
+    Supports admin triage (approve/reject/flag), Step 3 optional enrichment,
+    and live status lifecycle progression.
     Broadcasts 'status_update' over WebSocket.
     """
     existing = await db_get_request(request_id)
@@ -111,11 +144,11 @@ async def update_request(request_id: str, payload: RequestUpdate):
     return updated
 
 
-# Simulation endpoint for Dev A full lifecycle testing & volunteer accept from map
+# Volunteer & Donor Accept endpoint supporting custom helper identity
 @router.post("/{request_id}/accept")
-async def simulate_accept_request(request_id: str):
+async def simulate_accept_request(request_id: str, helper_payload: Optional[HelperAcceptPayload] = None):
     """
-    Accepts a request, simulates volunteer assignment, creates a match,
+    Accepts a request, simulates volunteer / donor assignment, creates a match,
     and broadcasts 'matched' to request, admin, and volunteer channels.
     """
     req = await db_get_request(request_id)
@@ -123,16 +156,24 @@ async def simulate_accept_request(request_id: str):
         raise HTTPException(status_code=404, detail="Request not found")
 
     match_id = str(uuid.uuid4())
-    helper_id = "h-1001-vol"
+    
+    helper_name = helper_payload.helper_name if helper_payload and helper_payload.helper_name else "Volunteer Unit Alpha (Red Cross Mumbai)"
+    helper_phone = helper_payload.helper_phone if helper_payload and helper_payload.helper_phone else "+91 98201 55019"
+    helper_id = helper_payload.helper_id if helper_payload and helper_payload.helper_id else "h-1001-vol"
+    helper_lat = helper_payload.helper_lat if helper_payload and helper_payload.helper_lat is not None else (req["lat"] + 0.003)
+    helper_lng = helper_payload.helper_lng if helper_payload and helper_payload.helper_lng is not None else (req["lng"] + 0.003)
+
     match_data = {
         "id": match_id,
         "request_id": request_id,
         "helper_id": helper_id,
-        "status": "en_route",
-        "helper_name": "Volunteer Unit Alpha (Red Cross)",
-        "helper_phone": "+1 (555) 0192",
-        "helper_lat": req["lat"] + 0.003,
-        "helper_lng": req["lng"] + 0.003,
+        "status": "on_the_way",
+        "helper_name": helper_name,
+        "helper_phone": helper_phone,
+        "helper_role": helper_payload.helper_role if helper_payload else "volunteer",
+        "blood_group": helper_payload.blood_group if helper_payload else None,
+        "helper_lat": helper_lat,
+        "helper_lng": helper_lng,
     }
     mem_db.matches[match_id] = match_data
 

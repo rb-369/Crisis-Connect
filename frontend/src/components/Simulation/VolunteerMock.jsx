@@ -87,7 +87,7 @@ function createVolunteerLocationPin() {
   });
 }
 
-export default function VolunteerMock() {
+export default function VolunteerMock({ currentUser, onOpenAuthModal }) {
   const [requests, setRequests] = useState([]);
   const [activeMatch, setActiveMatch] = useState(null);
   const [chatMessages, setChatMessages] = useState([]);
@@ -203,7 +203,7 @@ export default function VolunteerMock() {
   return (
     <div className="max-w-6xl mx-auto py-2 sm:py-6">
       {/* Top Banner */}
-      <div className="p-4 sm:p-5 rounded-2xl bg-[#EDE9FE] border border-[#DDD6FE] mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-sm">
+      <div className="p-4 sm:p-5 rounded-2xl bg-[#EDE9FE] border border-[#DDD6FE] mb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-sm">
         <div className="flex items-start space-x-3.5">
           <div className="p-2.5 rounded-xl bg-[#4338CA] text-white flex-shrink-0 shadow-sm">
             <Users className="w-5 h-5" />
@@ -248,6 +248,51 @@ export default function VolunteerMock() {
           </button>
         </div>
       </div>
+
+      {/* Verified Responder Profile Banner / Prompt */}
+      {currentUser && currentUser.role === 'volunteer' ? (
+        <div className="mb-6 p-4 rounded-2xl bg-[#DCFCE7] border border-[#BBF7D0] flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs shadow-sm">
+          <div className="flex items-center space-x-3">
+            <div className="w-8 h-8 rounded-xl bg-[#16A34A] text-white flex items-center justify-center font-bold">
+              ✓
+            </div>
+            <div>
+              <div className="font-extrabold text-[#15803D] text-sm flex items-center space-x-2">
+                <span>Verified First Responder: {currentUser.name}</span>
+                <span className="px-2 py-0.5 rounded bg-[#16A34A] text-white font-mono text-[10px]">{currentUser.id}</span>
+              </div>
+              <p className="text-[#166534] font-medium mt-0.5">
+                Two-Factor Verified &bull; Active Field Unit &bull; Ready for 1-Tap Emergency Claim & Dispatch.
+              </p>
+            </div>
+          </div>
+          <span className="px-3 py-1 rounded-xl bg-white border border-[#BBF7D0] text-[#15803D] font-bold self-start sm:self-auto">
+            ● GPS Radar Active
+          </span>
+        </div>
+      ) : (
+        <div className="mb-6 p-4 rounded-2xl bg-[#FEF3C7] border border-[#FDE68A] flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs shadow-sm">
+          <div className="flex items-center space-x-3">
+            <div className="w-8 h-8 rounded-xl bg-[#D97706] text-white flex items-center justify-center font-bold">
+              !
+            </div>
+            <div>
+              <div className="font-extrabold text-[#B45309] text-sm">
+                Responder Preview Mode (Unverified)
+              </div>
+              <p className="text-[#92400E] font-medium mt-0.5">
+                Complete multi-step volunteer verification (Skills, Govt ID & SMS OTP) to get official responder badge & emergency SMS dispatch alerts.
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={onOpenAuthModal}
+            className="px-3.5 py-2 rounded-xl bg-[#4338CA] hover:bg-[#3730A3] text-white font-bold transition shadow-sm self-start sm:self-auto flex-shrink-0 flex items-center space-x-1.5"
+          >
+            <span>Verify Volunteer ID &rarr;</span>
+          </button>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         

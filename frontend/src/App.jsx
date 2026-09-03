@@ -7,6 +7,7 @@ import AdminDashboard from './components/Admin/AdminDashboard';
 import AdminMap from './components/Admin/AdminMap';
 import ZoneReportScreen from './components/ZoneReport/ZoneReportScreen';
 import VolunteerMock from './components/Simulation/VolunteerMock';
+import MultiStepAuthModal from './components/Auth/MultiStepAuthModal';
 import { CrisisWebSocketClient } from './services/websocket';
 import { api } from './services/api';
 
@@ -15,6 +16,18 @@ export default function App() {
   const [requesterStep, setRequesterStep] = useState('report'); // 'report', 'enrichment', 'status'
   const [activeRequest, setActiveRequest] = useState(null);
   const [wsStatus, setWsStatus] = useState('connecting');
+
+  // Multi-step Auth state
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const [authModalDefaultRole, setAuthModalDefaultRole] = useState('volunteer');
+  const [currentUser, setCurrentUser] = useState(() => {
+    try {
+      const saved = localStorage.getItem('crisis_connect_user');
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  });
 
   // Maintain global WebSocket connection for connection badge
   useEffect(() => {
@@ -46,6 +59,26 @@ export default function App() {
     setRequesterStep('report');
   };
 
+  const handleOpenAuthModal = (role = 'volunteer') => {
+    setAuthModalDefaultRole(role);
+    setIsAuthModalOpen(true);
+  };
+
+  const handleAuthSuccess = (profile) => {
+    setCurrentUser(profile);
+    localStorage.setItem('crisis_connect_user', JSON.stringify(profile));
+    if (profile.role === 'volunteer') {
+      setCurrentTab('simulator');
+    } else if (profile.role === 'ngo') {
+      setCurrentTab('admin');
+    }
+  };
+
+  const handleLogout = () => {
+    setCurrentUser(null);
+    localStorage.removeItem('crisis_connect_user');
+  };
+
   const handleReseed = async () => {
     if (window.confirm('Reset and reseed demo crisis scenarios?')) {
       try {
@@ -72,6 +105,9 @@ export default function App() {
         onTabChange={setCurrentTab}
         wsStatus={wsStatus}
         onReseed={handleReseed}
+        currentUser={currentUser}
+        onOpenAuthModal={handleOpenAuthModal}
+        onLogout={handleLogout}
       />
 
       {/* Main Content Viewport */}
@@ -102,7 +138,11 @@ export default function App() {
 
         {/* NGO / Dispatch Triage Queue */}
         {currentTab === 'admin' && (
-          <AdminDashboard onOpenMap={() => setCurrentTab('admin-map')} />
+          <AdminDashboard 
+            onOpenMap={() => setCurrentTab('admin-map')}
+            currentUser={currentUser}
+            onOpenAuthModal={() => handleOpenAuthModal('ngo')}
+          />
         )}
 
         {/* Live GIS Crisis & Hazard Map */}
@@ -125,13 +165,24 @@ export default function App() {
 
         {/* Volunteer Mobile Simulator (Dev B Mock) */}
         {currentTab === 'simulator' && (
-          <VolunteerMock />
+          <VolunteerMock 
+            currentUser={currentUser}
+            onOpenAuthModal={() => handleOpenAuthModal('volunteer')}
+          />
         )}
       </main>
 
+      {/* Multi-Step Authentication & Verification Modal for Volunteers & NGOs */}
+      <MultiStepAuthModal
+        isOpen={isAuthModalOpen}
+        onClose={() => setIsAuthModalOpen(false)}
+        onAuthSuccess={handleAuthSuccess}
+        defaultRole={authModalDefaultRole}
+      />
+
       {/* Footer */}
       <footer className="border-t border-[#CBD5E1] bg-white py-4 px-6 text-center text-xs text-[#64748B] font-medium">
-        CrisisConnect Dev A Suite &bull; FastAPI &bull; Native WebSockets &bull; Supabase PostgreSQL &bull; React Vite Tailwind
+        CrisisConnect &bull; Emergency Coordination Platform &bull; FastAPI Native WebSockets &bull; Supabase PostgreSQL &bull; React Vite Tailwind
       </footer>
     </div>
   );

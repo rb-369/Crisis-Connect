@@ -17,7 +17,7 @@ import { api } from '../../services/api';
 import { CrisisWebSocketClient } from '../../services/websocket';
 import DuplicateBadge from '../Requester/DuplicateBadge';
 
-export default function AdminDashboard({ onOpenMap }) {
+export default function AdminDashboard({ onOpenMap, currentUser, onOpenAuthModal }) {
   const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState(''); // '' = all, 'pending', 'approved', 'rejected', 'flagged'
@@ -117,6 +117,48 @@ export default function AdminDashboard({ onOpenMap }) {
           </button>
         </div>
       </div>
+
+      {/* Verified NGO Status Banner / Verification Prompt */}
+      {currentUser && currentUser.role === 'ngo' ? (
+        <div className="mb-5 p-4 rounded-2xl bg-[#DCFCE7] border border-[#BBF7D0] flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs shadow-sm">
+          <div className="flex items-center space-x-3">
+            <ShieldCheck className="w-6 h-6 text-[#16A34A] flex-shrink-0" />
+            <div>
+              <div className="font-extrabold text-[#15803D] text-sm flex items-center space-x-2">
+                <span>Authorized NGO Dispatch Unit: {currentUser.name}</span>
+                <span className="px-2 py-0.5 rounded bg-[#16A34A] text-white font-mono text-[10px]">{currentUser.id}</span>
+              </div>
+              <p className="text-[#166534] font-medium mt-0.5">
+                Darpan / Govt Verified Clearance &bull; Authorized for Emergency Incident Triage & Responding Unit Dispatch.
+              </p>
+            </div>
+          </div>
+          <span className="px-3 py-1.5 rounded-xl bg-white border border-[#BBF7D0] text-[#15803D] font-bold self-start sm:self-auto">
+            ✓ Tier-2 Triage Active
+          </span>
+        </div>
+      ) : (
+        <div className="mb-5 p-4 rounded-2xl bg-[#FEF3C7] border border-[#FDE68A] flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs shadow-sm">
+          <div className="flex items-center space-x-3">
+            <AlertTriangle className="w-6 h-6 text-[#D97706] flex-shrink-0" />
+            <div>
+              <div className="font-extrabold text-[#B45309] text-sm">
+                Viewing in Public Triage Preview Mode
+              </div>
+              <p className="text-[#92400E] font-medium mt-0.5">
+                Complete multi-step NGO verification to attach official agency credentials & Darpan authorization to moderation decisions.
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={onOpenAuthModal}
+            className="px-3.5 py-2 rounded-xl bg-[#D97706] hover:bg-[#B45309] text-white font-bold transition shadow-sm self-start sm:self-auto flex-shrink-0 flex items-center space-x-1.5"
+          >
+            <ShieldCheck className="w-4 h-4" />
+            <span>Verify NGO Credentials &rarr;</span>
+          </button>
+        </div>
+      )}
 
       {/* Filter Tabs */}
       <div className="flex items-center space-x-2 overflow-x-auto pb-2 mb-5 border-b border-[#CBD5E1]">

@@ -1,0 +1,36 @@
+services:
+  # 1. FastAPI Backend (Persistent Web Service with WebSockets)
+  - type: web
+    name: crisis-connect-backend
+    env: python
+    region: oregon
+    plan: free
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_KEY
+        sync: false
+
+  # 2. React Vite Frontend (Static Site)
+  - type: web
+    name: crisis-connect-frontend
+    env: static
+    region: oregon
+    plan: free
+    rootDir: frontend
+    buildCommand: npm install && npm run build
+    staticPublishPath: dist
+    envVars:
+      - key: VITE_BACKEND_URL
+        fromService:
+          type: web
+          name: crisis-connect-backend
+          property: host
+      - key: VITE_WS_URL
+        fromService:
+          type: web
+          name: crisis-connect-backend
+          property: host

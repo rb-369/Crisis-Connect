@@ -1,16 +1,30 @@
-// Dynamically determine backend host based on the current browser URL
-// This ensures connections work seamlessly when accessed from localhost, LAN IP (friend's laptop), or deployed domains!
+// Live Production Render backend for deployed environments (Vercel, custom domains)
+const PROD_BACKEND_URL = 'https://crisis-connect-m6da.onrender.com';
+
 function getApiBase() {
+  // 1. Explicit environment variable (if set in Vercel or .env)
   if (import.meta.env.VITE_BACKEND_URL) {
-    return import.meta.env.VITE_BACKEND_URL;
+    return import.meta.env.VITE_BACKEND_URL.replace(/\/$/, '');
   }
+
+  // 2. Automatic environment detection
   if (typeof window !== 'undefined') {
-    const protocol = window.location.protocol === 'https:' ? 'https:' : 'http:';
     const hostname = window.location.hostname || 'localhost';
-    // If running on a non-standard port or tunnel that bundles backend, or default port 8000
-    return `${protocol}//${hostname}:8000`;
+    // Local dev or local LAN IP (e.g. 192.168.x.x, 10.x.x.x, 127.0.0.1)
+    const isLocal = hostname === 'localhost' || 
+                    hostname === '127.0.0.1' || 
+                    hostname.startsWith('192.168.') || 
+                    hostname.startsWith('10.') || 
+                    hostname.endsWith('.local');
+
+    if (isLocal) {
+      const protocol = window.location.protocol === 'https:' ? 'https:' : 'http:';
+      return `${protocol}//${hostname}:8000`;
+    }
   }
-  return 'http://localhost:8000';
+
+  // 3. Fallback for Vercel (crisisconnect369.vercel.app) and any public deployment
+  return PROD_BACKEND_URL;
 }
 
 const API_BASE = getApiBase();

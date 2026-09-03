@@ -1,7 +1,10 @@
 /**
- * Native WebSocket Client with automatic reconnection and dynamic host resolution.
- * Automatically adapts when accessed from localhost, friend's laptop via LAN IP, or public domains.
+ * Native WebSocket Client with automatic reconnection and environment detection.
+ * Connects to Render (wss://crisis-connect-m6da.onrender.com) when deployed on Vercel,
+ * and connects to local port 8000 when running locally.
  */
+const PROD_WS_URL = 'wss://crisis-connect-m6da.onrender.com';
+
 export class CrisisWebSocketClient {
   constructor(channelType, channelId, onMessage, onStatusChange) {
     this.channelType = channelType;
@@ -17,20 +20,29 @@ export class CrisisWebSocketClient {
   }
 
   getWebSocketUrl() {
+    // 1. Explicit environment variable (if provided)
     if (import.meta.env.VITE_WS_URL) {
-      return `${import.meta.env.VITE_WS_URL}/ws/${this.channelType}/${encodeURIComponent(this.channelId)}`;
+      const base = import.meta.env.VITE_WS_URL.replace(/\/$/, '');
+      return `${base}/ws/${this.channelType}/${encodeURIComponent(this.channelId)}`;
     }
 
-    let wsProtocol = 'ws:';
-    let host = 'localhost:8000';
-
+    // 2. Automatic local environment detection
     if (typeof window !== 'undefined') {
-      wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
       const hostname = window.location.hostname || 'localhost';
-      host = `${hostname}:8000`;
+      const isLocal = hostname === 'localhost' || 
+                      hostname === '127.0.0.1' || 
+                      hostname.startsWith('192.168.') || 
+                      hostname.startsWith('10.') || 
+                      hostname.endsWith('.local');
+
+      if (isLocal) {
+        const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        return `${wsProtocol}//${hostname}:8000/ws/${this.channelType}/${encodeURIComponent(this.channelId)}`;
+      }
     }
 
-    return `${wsProtocol}//${host}/ws/${this.channelType}/${encodeURIComponent(this.channelId)}`;
+    // 3. Fallback for Vercel (crisisconnect369.vercel.app) to connect to live Render backend
+    return `${PROD_WS_URL}/ws/${this.channelType}/${encodeURIComponent(this.channelId)}`;
   }
 
   connect() {

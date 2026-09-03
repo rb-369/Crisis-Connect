@@ -284,22 +284,34 @@ export default function AdminMap() {
       };
       const catColor = colorMap[req.category] || '#DC2626';
 
+      // Ensure coordinates are valid numbers
+      const reqLat = parseFloat(req.lat);
+      const reqLng = parseFloat(req.lng);
+      if (isNaN(reqLat) || isNaN(reqLng)) return;
+
       // Create or update marker
       if (!markersRef.current[req.id]) {
+        // Outer anchor element for MapLibre positioning (MapLibre controls transform: translate)
         const el = document.createElement('div');
-        el.className = 'custom-maplibre-pin';
+        el.className = 'maplibre-marker-anchor';
         el.style.width = '32px';
         el.style.height = '32px';
-        el.style.borderRadius = '50%';
-        el.style.background = catColor;
-        el.style.border = '2.5px solid #FFFFFF';
-        el.style.boxShadow = '0 4px 10px rgba(15,23,42,0.4)';
         el.style.cursor = 'pointer';
-        el.style.display = 'flex';
-        el.style.alignItems = 'center';
-        el.style.justifyContent = 'center';
+
+        // Inner element for badge color and pulse animation
+        const inner = document.createElement('div');
+        inner.className = 'custom-maplibre-pin';
+        inner.style.width = '32px';
+        inner.style.height = '32px';
+        inner.style.borderRadius = '50%';
+        inner.style.background = catColor;
+        inner.style.border = '2.5px solid #FFFFFF';
+        inner.style.boxShadow = '0 4px 10px rgba(15,23,42,0.4)';
+        inner.style.display = 'flex';
+        inner.style.alignItems = 'center';
+        inner.style.justifyContent = 'center';
         if (isHigh) {
-          el.style.animation = 'urgent-radar 1.6s infinite';
+          inner.style.animation = 'urgent-radar 1.6s infinite';
         }
 
         const dot = document.createElement('div');
@@ -307,15 +319,18 @@ export default function AdminMap() {
         dot.style.height = '8px';
         dot.style.background = '#FFFFFF';
         dot.style.borderRadius = '50%';
-        el.appendChild(dot);
+        inner.appendChild(dot);
 
-        el.addEventListener('click', () => {
+        el.appendChild(inner);
+
+        el.addEventListener('click', (e) => {
+          e.stopPropagation();
           setSelectedItem(req);
-          map.current.flyTo({ center: [req.lng, req.lat], zoom: 14.5, duration: 800 });
+          map.current.flyTo({ center: [reqLng, reqLat], zoom: 14.5, duration: 800 });
         });
 
-        const marker = new maplibregl.Marker({ element: el })
-          .setLngLat([req.lng, req.lat])
+        const marker = new maplibregl.Marker({ element: el, anchor: 'center' })
+          .setLngLat([reqLng, reqLat])
           .addTo(map.current);
 
         markersRef.current[req.id] = marker;
@@ -325,35 +340,43 @@ export default function AdminMap() {
       const volId = `vol-${req.id}`;
       if (isMatched) {
         currentIds.add(volId);
-        const helperLng = req.match_info?.helper_lng || (req.lng + 0.003);
-        const helperLat = req.match_info?.helper_lat || (req.lat + 0.003);
+        const helperLng = parseFloat(req.match_info?.helper_lng || (reqLng + 0.003));
+        const helperLat = parseFloat(req.match_info?.helper_lat || (reqLat + 0.003));
 
         if (!markersRef.current[volId]) {
           const volEl = document.createElement('div');
+          volEl.className = 'maplibre-vol-anchor';
           volEl.style.width = '32px';
           volEl.style.height = '32px';
-          volEl.style.borderRadius = '50%';
-          volEl.style.background = '#4338CA';
-          volEl.style.border = '2.5px solid #FFFFFF';
-          volEl.style.boxShadow = '0 4px 12px rgba(67,56,202,0.5)';
           volEl.style.cursor = 'pointer';
-          volEl.style.display = 'flex';
-          volEl.style.alignItems = 'center';
-          volEl.style.justifyContent = 'center';
+
+          const volInner = document.createElement('div');
+          volInner.style.width = '32px';
+          volInner.style.height = '32px';
+          volInner.style.borderRadius = '50%';
+          volInner.style.background = '#4338CA';
+          volInner.style.border = '2.5px solid #FFFFFF';
+          volInner.style.boxShadow = '0 4px 12px rgba(67,56,202,0.5)';
+          volInner.style.display = 'flex';
+          volInner.style.alignItems = 'center';
+          volInner.style.justifyContent = 'center';
 
           const innerDot = document.createElement('div');
           innerDot.style.width = '10px';
           innerDot.style.height = '10px';
           innerDot.style.background = '#FFFFFF';
           innerDot.style.borderRadius = '50%';
-          volEl.appendChild(innerDot);
+          volInner.appendChild(innerDot);
 
-          volEl.addEventListener('click', () => {
+          volEl.appendChild(volInner);
+
+          volEl.addEventListener('click', (e) => {
+            e.stopPropagation();
             setSelectedItem(req);
             map.current.flyTo({ center: [helperLng, helperLat], zoom: 15, duration: 800 });
           });
 
-          const volMarker = new maplibregl.Marker({ element: volEl })
+          const volMarker = new maplibregl.Marker({ element: volEl, anchor: 'center' })
             .setLngLat([helperLng, helperLat])
             .addTo(map.current);
 

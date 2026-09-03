@@ -11,11 +11,11 @@ function getApiBase() {
   if (typeof window !== 'undefined') {
     const hostname = window.location.hostname || 'localhost';
     // Local dev or local LAN IP (e.g. 192.168.x.x, 10.x.x.x, 127.0.0.1)
-    const isLocal = hostname === 'localhost' || 
-                    hostname === '127.0.0.1' || 
-                    hostname.startsWith('192.168.') || 
-                    hostname.startsWith('10.') || 
-                    hostname.endsWith('.local');
+    const isLocal = hostname === 'localhost' ||
+      hostname === '127.0.0.1' ||
+      hostname.startsWith('192.168.') ||
+      hostname.startsWith('10.') ||
+      hostname.endsWith('.local');
 
     if (isLocal) {
       const protocol = window.location.protocol === 'https:' ? 'https:' : 'http:';
@@ -44,7 +44,7 @@ async function fetchJson(endpoint, options = {}) {
     try {
       const err = await response.json();
       errorDetail = err.detail || JSON.stringify(err);
-    } catch (_) {}
+    } catch (_) { }
     throw new Error(`API Error [${response.status}]: ${errorDetail}`);
   }
 

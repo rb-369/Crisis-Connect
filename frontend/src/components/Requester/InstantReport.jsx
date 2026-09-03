@@ -146,16 +146,20 @@ export default function InstantReport({ onRequestCreated }) {
     const deviceId = getDeviceId();
     const payload = {
       category: 'rescue',
-      urgency: 'high',
       lat: coords.lat,
       lng: coords.lng,
       requester_device_id: deviceId,
       details: '🚨 MASTER EMERGENCY SOS TRIGGERED: Immediate rescue & multi-service emergency assistance required.',
-      is_critical: true,
     };
 
     try {
-      const created = await api.createRequest(payload);
+      let created;
+      try {
+        const sosRes = await api.createSos(payload);
+        created = { __sos: true, ...(sosRes.request || {}), incident: sosRes.incident };
+      } catch {
+        created = await api.createRequest({ ...payload, urgency: 'high', is_critical: true });
+      }
       setIsSubmitting(false);
       onRequestCreated(created);
     } catch (err) {
@@ -179,28 +183,32 @@ export default function InstantReport({ onRequestCreated }) {
 
   const handleCriticalRescueSubmit = async () => {
     setIsSubmitting(true);
-    setSubmittingType('rescue');
+    setSubmittingType('RESCUE_1TAP');
     setSelectedCategory('rescue');
     setErrorMessage(null);
 
     const deviceId = getDeviceId();
     const payload = {
       category: 'rescue',
-      urgency: 'high',
       lat: coords.lat,
       lng: coords.lng,
       requester_device_id: deviceId,
-      details: '🚨 CRITICAL RESCUE DISPATCH: Trapped persons reported needing immediate water rescue.',
-      is_critical: true,
+      details: 'Critical 1-Tap Rescue Request (Direct GPS Dispatch)',
     };
 
     try {
-      const created = await api.createRequest(payload);
+      let created;
+      try {
+        const sosRes = await api.createSos(payload);
+        created = { __sos: true, ...(sosRes.request || {}), incident: sosRes.incident };
+      } catch {
+        created = await api.createRequest({ ...payload, urgency: 'high', is_critical: true });
+      }
       setIsSubmitting(false);
       onRequestCreated(created);
     } catch (err) {
-      console.error('Instant SOS creation failed:', err);
-      setErrorMessage(err.message || 'Failed to dispatch SOS. Check backend connection.');
+      console.error('Rescue SOS failed:', err);
+      setErrorMessage(err.message || 'Failed to dispatch 1-Tap SOS.');
       setIsSubmitting(false);
     }
   };

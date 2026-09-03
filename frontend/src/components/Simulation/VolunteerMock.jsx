@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
-import { MapContainer, TileLayer, Marker, Popup, Polyline } from 'react-leaflet';
-import L from 'leaflet';
+import React, { useState, useEffect, useRef } from 'react';
+import * as maplibregl from 'maplibre-gl';
+import 'maplibre-gl/dist/maplibre-gl.css';
 import { 
   Users, 
   CheckCircle, 
@@ -22,7 +22,8 @@ import {
   Utensils,
   Sparkles,
   ShieldCheck,
-  Award
+  Award,
+  Layers
 } from 'lucide-react';
 import { api } from '../../services/api';
 import { CrisisWebSocketClient } from '../../services/websocket';
@@ -91,74 +92,6 @@ const DONOR_PROFILES = [
   },
 ];
 
-// Volunteer Map Icons
-function createVolMapPinIcon(category, urgency, isCompatibleBlood = false) {
-  const isHigh = urgency === 'high';
-  const colorMap = {
-    rescue: '#991B1B',
-    blood: '#DC2626',
-    oxygen: '#0891B2',
-    medicine: '#2563EB',
-    food: '#D97706',
-    shelter: '#7C3AED',
-    transport: '#0D9488',
-  };
-  const color = colorMap[category] || '#DC2626';
-
-  const html = `
-    <div style="
-      position: relative;
-      width: ${isCompatibleBlood ? '38px' : '32px'};
-      height: ${isCompatibleBlood ? '38px' : '32px'};
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      background: ${color};
-      border: ${isCompatibleBlood ? '3.5px solid #FEF08A' : '2.5px solid #FFFFFF'};
-      border-radius: 50%;
-      box-shadow: 0 4px 12px rgba(15, 23, 42, 0.45);
-      ${isHigh || isCompatibleBlood ? 'animation: urgent-radar 1.5s infinite;' : ''}
-    ">
-      <div style="width: 8px; height: 8px; background: #FFFFFF; border-radius: 50%;"></div>
-    </div>
-  `;
-
-  return L.divIcon({
-    html,
-    className: 'volunteer-view-pin',
-    iconSize: [32, 32],
-    iconAnchor: [16, 16],
-    popupAnchor: [0, -16],
-  });
-}
-
-function createVolunteerLocationPin() {
-  const html = `
-    <div style="
-      position: relative;
-      width: 38px;
-      height: 38px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      background: #2563EB;
-      border: 3.5px solid #FFFFFF;
-      border-radius: 50%;
-      box-shadow: 0 4px 14px rgba(37, 99, 235, 0.55);
-    ">
-      <div style="width: 10px; height: 10px; background: #FFFFFF; border-radius: 50%;"></div>
-    </div>
-  `;
-
-  return L.divIcon({
-    html,
-    className: 'vol-self-pin',
-    iconSize: [38, 38],
-    iconAnchor: [19, 19],
-    popupAnchor: [0, -19],
-  });
-}
-
 export default function VolunteerMock({ currentUser, onOpenAuthModal }) {
   const [selectedDonorProfile, setSelectedDonorProfile] = useState(DONOR_PROFILES[0]);
   const [requests, setRequests] = useState([]);
@@ -167,6 +100,13 @@ export default function VolunteerMock({ currentUser, onOpenAuthModal }) {
   const [chatInput, setChatInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [viewMode, setViewMode] = useState('list'); // 'list' or 'map'
+  const [selectedPinReq, setSelectedPinReq] = useState(null);
+
+  // MapLibre Refs
+  const mapContainer = useRef(null);
+  const mapInstance = useRef(null);
+  const markersRef = useRef({});
+  const volunteerMarkerRef = useRef(null);
 
   const fetchRequests = async () => {
     setLoading(true);
@@ -174,7 +114,7 @@ export default function VolunteerMock({ currentUser, onOpenAuthModal }) {
       const data = await api.getRequests();
       setRequests(data);
     } catch (err) {
-      console.error(err);
+      console.error('Failed to load requests in VolunteerMock:', err);
     } finally {
       setLoading(false);
     }
@@ -226,6 +166,219 @@ export default function VolunteerMock({ currentUser, onOpenAuthModal }) {
     return () => wsClient.close();
   }, [activeMatch?.id]);
 
+  // Initialize MapLibre GL JS Map when Map view is mounted
+  useEffect(() => {
+    if (viewMode !== 'map' || !mapContainer.current) return;
+    if (mapInstance.current) return;
+
+    const center = [selectedDonorProfile.lng || 72.8478, selectedDonorProfile.lat || 19.0178];
+
+    mapInstance.current = new maplibregl.Map({
+      container: mapContainer.current,
+      style: {
+        version: 8,
+        sources: {
+          'osm-tiles': {
+            type: 'raster',
+            tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
+            tileSize: 256,
+            attribution: '&copy; OpenStreetMap contributors | MapLibre GL JS'
+          }
+        },
+        layers: [
+          {
+            id: 'osm-tiles-layer',
+            type: 'raster',
+            source: 'osm-tiles',
+            minzoom: 0,
+            maxzoom: 19
+          }
+        ]
+      },
+      center: center,
+      zoom: 13,
+    });
+
+    mapInstance.current.addControl(new maplibregl.NavigationControl(), 'top-right');
+
+    mapInstance.current.on('load', () => {
+      // Add GeoJSON Route Layer between volunteer and matched incident
+      if (!mapInstance.current.getSource('route-source')) {
+        mapInstance.current.addSource('route-source', {
+          type: 'geojson',
+          data: {
+            type: 'Feature',
+            geometry: {
+              type: 'LineString',
+              coordinates: []
+            }
+          }
+        });
+
+        mapInstance.current.addLayer({
+          id: 'route-line',
+          type: 'line',
+          source: 'route-source',
+          layout: {
+            'line-join': 'round',
+            'line-cap': 'round'
+          },
+          paint: {
+            'line-color': '#2563EB',
+            'line-width': 4,
+            'line-dasharray': [2, 2]
+          }
+        });
+      }
+    });
+
+    return () => {
+      if (mapInstance.current) {
+        mapInstance.current.remove();
+        mapInstance.current = null;
+      }
+    };
+  }, [viewMode]);
+
+  // Update MapLibre Markers & Volunteer Location on Data Change
+  useEffect(() => {
+    if (!mapInstance.current || viewMode !== 'map') return;
+
+    // 1. Volunteer Location Pin
+    if (volunteerMarkerRef.current) {
+      volunteerMarkerRef.current.remove();
+    }
+
+    const volEl = document.createElement('div');
+    volEl.className = 'vol-location-marker';
+    volEl.style.width = '36px';
+    volEl.style.height = '36px';
+    volEl.style.borderRadius = '50%';
+    volEl.style.backgroundColor = '#2563EB';
+    volEl.style.border = '3.5px solid #FFFFFF';
+    volEl.style.boxShadow = '0 4px 14px rgba(37,99,235,0.6)';
+    volEl.style.display = 'flex';
+    volEl.style.alignItems = 'center';
+    volEl.style.justifyContent = 'center';
+    volEl.style.cursor = 'pointer';
+
+    const volDot = document.createElement('div');
+    volDot.style.width = '10px';
+    volDot.style.height = '10px';
+    volDot.style.backgroundColor = '#FFFFFF';
+    volDot.style.borderRadius = '50%';
+    volEl.appendChild(volDot);
+
+    volunteerMarkerRef.current = new maplibregl.Marker({ element: volEl })
+      .setLngLat([selectedDonorProfile.lng, selectedDonorProfile.lat])
+      .setPopup(
+        new maplibregl.Popup({ offset: 25 }).setHTML(`
+          <div style="font-family: sans-serif; padding: 4px;">
+            <div style="font-weight: 800; font-size: 12px; color: #1E40AF;">📍 Your Responder Location</div>
+            <div style="font-size: 11px; color: #475569; margin-top: 2px;">${selectedDonorProfile.name}</div>
+          </div>
+        `)
+      )
+      .addTo(mapInstance.current);
+
+    // 2. Incident Request Pins
+    const currentIds = new Set();
+    const colorMap = {
+      rescue: '#991B1B',
+      blood: '#DC2626',
+      oxygen: '#0891B2',
+      medicine: '#2563EB',
+      food: '#D97706',
+      shelter: '#7C3AED',
+      transport: '#0D9488',
+    };
+
+    requests.forEach((req) => {
+      currentIds.add(req.id);
+      const isBlood = req.category === 'blood';
+      const reqBlood = req.service_details?.blood_group;
+      const donorBlood = selectedDonorProfile.bloodGroup;
+      const isCompatible = isBlood && donorBlood ? isDonorCompatible(donorBlood, reqBlood) : false;
+      const color = colorMap[req.category] || '#DC2626';
+
+      if (!markersRef.current[req.id]) {
+        const markerEl = document.createElement('div');
+        markerEl.className = 'maplibre-incident-pin';
+        markerEl.style.width = isCompatible ? '36px' : '30px';
+        markerEl.style.height = isCompatible ? '36px' : '30px';
+        markerEl.style.borderRadius = '50%';
+        markerEl.style.backgroundColor = color;
+        markerEl.style.border = isCompatible ? '3.5px solid #FDE047' : '2.5px solid #FFFFFF';
+        markerEl.style.boxShadow = '0 4px 12px rgba(15,23,42,0.4)';
+        markerEl.style.display = 'flex';
+        markerEl.style.alignItems = 'center';
+        markerEl.style.justifyContent = 'center';
+        markerEl.style.cursor = 'pointer';
+
+        if (req.urgency === 'high' || isCompatible) {
+          markerEl.style.animation = 'urgent-radar 1.6s infinite';
+        }
+
+        const dot = document.createElement('div');
+        dot.style.width = '8px';
+        dot.style.height = '8px';
+        dot.style.backgroundColor = '#FFFFFF';
+        dot.style.borderRadius = '50%';
+        markerEl.appendChild(dot);
+
+        markerEl.addEventListener('click', () => {
+          setSelectedPinReq(req);
+        });
+
+        const popupContent = `
+          <div style="font-family: sans-serif; padding: 6px; min-width: 200px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+              <span style="font-size: 10px; font-weight: 900; text-transform: uppercase; background: #0F172A; color: #FFFFFF; padding: 2px 6px; border-radius: 4px;">
+                ${req.category}
+              </span>
+              ${isCompatible ? `<span style="font-size: 10px; font-weight: 800; background: #DCFCE7; color: #15803D; padding: 2px 5px; border-radius: 4px;">✓ Compatible (${donorBlood} → ${reqBlood})</span>` : ''}
+            </div>
+            ${reqBlood ? `<div style="font-size: 11px; font-weight: 800; color: #DC2626; margin-bottom: 2px;">🩸 Needed: ${reqBlood} (${req.service_details?.units || 2} Units)</div>` : ''}
+            <div style="font-size: 11px; font-weight: 600; color: #0F172A; line-height: 1.3;">${req.details || 'Emergency Assistance Request'}</div>
+            <div style="font-size: 10px; color: #64748B; margin-top: 4px;">ID: ${req.id.substring(0, 8)}...</div>
+          </div>
+        `;
+
+        const popup = new maplibregl.Popup({ offset: 25 }).setHTML(popupContent);
+
+        const marker = new maplibregl.Marker({ element: markerEl })
+          .setLngLat([req.lng, req.lat])
+          .setPopup(popup)
+          .addTo(mapInstance.current);
+
+        markersRef.current[req.id] = marker;
+      }
+    });
+
+    // Remove obsolete markers
+    Object.keys(markersRef.current).forEach((id) => {
+      if (!currentIds.has(id)) {
+        markersRef.current[id].remove();
+        delete markersRef.current[id];
+      }
+    });
+
+    // 3. Update Route Line if active match
+    if (activeMatch && mapInstance.current.getSource('route-source')) {
+      const routeGeoJson = {
+        type: 'Feature',
+        geometry: {
+          type: 'LineString',
+          coordinates: [
+            [selectedDonorProfile.lng, selectedDonorProfile.lat],
+            [activeMatch.lng, activeMatch.lat]
+          ]
+        }
+      };
+      mapInstance.current.getSource('route-source').setData(routeGeoJson);
+    }
+  }, [requests, selectedDonorProfile, viewMode, activeMatch]);
+
   const handleAccept = async (req) => {
     try {
       const helperPayload = {
@@ -252,6 +405,16 @@ export default function VolunteerMock({ currentUser, onOpenAuthModal }) {
         helperLng: res.match.helper_lng || selectedDonorProfile.lng,
         details: matchedReq.details,
       });
+
+      // Fly map to match incident if map is open
+      if (mapInstance.current) {
+        mapInstance.current.flyTo({
+          center: [matchedReq.lng, matchedReq.lat],
+          zoom: 14.5,
+          duration: 900
+        });
+      }
+
       fetchRequests();
     } catch (err) {
       console.error('Accept error:', err);
@@ -281,9 +444,21 @@ export default function VolunteerMock({ currentUser, onOpenAuthModal }) {
     }
   };
 
-  const defaultCenter = requests.length > 0
-    ? [requests[0].lat, requests[0].lng]
-    : [19.0760, 72.8777]; // Mumbai, India
+  const flyToIncident = (req) => {
+    setSelectedPinReq(req);
+    if (viewMode !== 'map') {
+      setViewMode('map');
+    }
+    setTimeout(() => {
+      if (mapInstance.current) {
+        mapInstance.current.flyTo({
+          center: [req.lng, req.lat],
+          zoom: 15,
+          duration: 800
+        });
+      }
+    }, 150);
+  };
 
   return (
     <div className="max-w-6xl mx-auto py-2 sm:py-6">
@@ -299,11 +474,11 @@ export default function VolunteerMock({ currentUser, onOpenAuthModal }) {
                 Volunteer & Blood Donor Response Portal
               </h3>
               <span className="px-2 py-0.5 rounded-full bg-[#22C55E]/20 text-[#4ADE80] text-[10px] font-mono font-bold uppercase tracking-wider border border-[#22C55E]/30">
-                Live Dispatch Ready
+                MapLibre GL JS Enabled
               </span>
             </div>
             <p className="text-xs text-slate-300 mt-1 font-medium max-w-xl leading-relaxed">
-              Match with nearby verified non-critical emergency requests based on location & clinical requirement (e.g. Blood Group compatibility, Oxygen supplies, Food & Medicine).
+              Real-time MapLibre vector radar & blood donor compatibility engine. Match with nearby emergency requests in Mumbai with 1-tap dispatch.
             </p>
           </div>
         </div>
@@ -321,11 +496,12 @@ export default function VolunteerMock({ currentUser, onOpenAuthModal }) {
             </button>
             <button
               onClick={() => setViewMode('map')}
-              className={`px-3 py-1.5 rounded-lg transition cursor-pointer ${
+              className={`px-3 py-1.5 rounded-lg transition cursor-pointer flex items-center space-x-1 ${
                 viewMode === 'map' ? 'bg-[#2563EB] text-white shadow-sm' : 'text-slate-400 hover:text-white'
               }`}
             >
-              Interactive Map
+              <Navigation className="w-3.5 h-3.5" />
+              <span>MapLibre Map</span>
             </button>
           </div>
 
@@ -349,7 +525,7 @@ export default function VolunteerMock({ currentUser, onOpenAuthModal }) {
             </span>
           </div>
           <span className="text-[11px] text-[#64748B] font-mono">
-            Current: <strong className="text-[#0F172A]">{selectedDonorProfile.name}</strong>
+            Active: <strong className="text-[#0F172A]">{selectedDonorProfile.name}</strong>
           </span>
         </div>
 
@@ -360,7 +536,16 @@ export default function VolunteerMock({ currentUser, onOpenAuthModal }) {
               <button
                 key={profile.id}
                 type="button"
-                onClick={() => setSelectedDonorProfile(profile)}
+                onClick={() => {
+                  setSelectedDonorProfile(profile);
+                  if (mapInstance.current) {
+                    mapInstance.current.flyTo({
+                      center: [profile.lng, profile.lat],
+                      zoom: 13.5,
+                      duration: 800
+                    });
+                  }
+                }}
                 className={`p-3 rounded-xl border text-left transition-all cursor-pointer flex items-center justify-between ${
                   isSelected
                     ? 'bg-[#EFF6FF] border-[#2563EB] ring-2 ring-[#2563EB]/20 shadow-xs'
@@ -385,108 +570,84 @@ export default function VolunteerMock({ currentUser, onOpenAuthModal }) {
       {/* MAIN CONTENT GRID */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         
-        {/* Left 7 Cols: Map or List View */}
+        {/* Left 7 Cols: MapLibre GL JS Vector Map or Priority Feed */}
         <div className="lg:col-span-7 space-y-4">
           {viewMode === 'map' ? (
             <div className="bg-white border border-[#CBD5E1] rounded-2xl p-4 shadow-sm space-y-3">
               <div className="flex items-center justify-between">
-                <h4 className="text-xs font-black uppercase tracking-wider text-[#0F172A] flex items-center space-x-2">
+                <div className="flex items-center space-x-2">
                   <Navigation className="w-4 h-4 text-[#2563EB]" />
-                  <span>Responder Live Radar Map</span>
-                </h4>
-                <span className="text-xs font-mono text-[#64748B]">
-                  {requests.filter(r => r.status === 'requested').length} active distress pins
+                  <h4 className="text-xs font-black uppercase tracking-wider text-[#0F172A]">
+                    MapLibre GL JS Responder Radar
+                  </h4>
+                </div>
+                <span className="text-[11px] font-mono text-[#64748B]">
+                  {requests.filter(r => r.status === 'requested').length} active pins in Mumbai
                 </span>
               </div>
 
-              {/* Map */}
-              <div className="w-full h-[460px] rounded-xl overflow-hidden border border-[#CBD5E1] relative">
-                <MapContainer
-                  center={defaultCenter}
-                  zoom={13}
-                  scrollWheelZoom={true}
-                  style={{ height: '100%', width: '100%' }}
-                >
-                  <TileLayer
-                    attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-                    url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                  />
+              {/* MapLibre Map Container */}
+              <div className="w-full h-[480px] rounded-xl overflow-hidden border border-[#CBD5E1] relative shadow-inner">
+                <div
+                  ref={mapContainer}
+                  className="w-full h-full"
+                  style={{ width: '100%', height: '100%' }}
+                />
 
-                  {/* Requests Pins */}
-                  {requests.map((r) => {
-                    const reqBlood = r.service_details?.blood_group;
-                    const isBloodReq = r.category === 'blood';
-                    const isCompatible = isBloodReq && selectedDonorProfile.bloodGroup
-                      ? isDonorCompatible(selectedDonorProfile.bloodGroup, reqBlood)
-                      : false;
-
-                    return (
-                      <Marker
-                        key={r.id}
-                        position={[r.lat, r.lng]}
-                        icon={createVolMapPinIcon(r.category, r.urgency, isCompatible)}
-                      >
-                        <Popup>
-                          <div className="p-1 text-xs space-y-2 min-w-[220px]">
-                            <div className="flex items-center justify-between border-b border-[#CBD5E1] pb-1">
-                              <span className="font-black uppercase text-[#991B1B]">{r.category}</span>
-                              <span className="px-2 py-0.5 rounded text-[10px] font-black bg-[#DCFCE7] text-[#15803D]">
-                                Verified
-                              </span>
-                            </div>
-                            
-                            {isBloodReq && reqBlood && (
-                              <div className="p-1.5 rounded-lg bg-red-50 text-red-800 text-[11px] font-bold">
-                                🩸 Blood Needed: {reqBlood} ({r.service_details?.units || 2} Units)
-                              </div>
-                            )}
-
-                            <p className="text-[#0F172A] font-medium text-[11px]">{r.details || 'Emergency Assistance Request'}</p>
-                            
-                            {r.status === 'requested' && (
-                              <button
-                                onClick={() => handleAccept(r)}
-                                className="w-full py-1.5 rounded-lg bg-[#2563EB] hover:bg-[#1D4ED8] text-white font-extrabold text-xs shadow-sm flex items-center justify-center space-x-1 cursor-pointer"
-                              >
-                                <Check className="w-3.5 h-3.5" />
-                                <span>Accept Request (1-Tap)</span>
-                              </button>
-                            )}
-                          </div>
-                        </Popup>
-                      </Marker>
-                    );
-                  })}
-
-                  {/* Active Match Volunteer Marker & Polyline */}
-                  {activeMatch && (
-                    <>
-                      <Marker
-                        position={[activeMatch.helperLat, activeMatch.helperLng]}
-                        icon={createVolunteerLocationPin()}
-                      >
-                        <Popup>
-                          <div className="p-1 text-xs font-bold text-[#2563EB]">
-                            {selectedDonorProfile.name}
-                          </div>
-                        </Popup>
-                      </Marker>
-
-                      <Polyline
-                        positions={[
-                          [activeMatch.helperLat, activeMatch.helperLng],
-                          [activeMatch.lat, activeMatch.lng],
-                        ]}
-                        pathOptions={{
-                          color: '#2563EB',
-                          weight: 4,
-                          dashArray: '8, 8',
-                        }}
-                      />
-                    </>
-                  )}
-                </MapContainer>
+                {/* Map Legend Overlay */}
+                <div className="absolute bottom-3 left-3 right-3 p-2.5 rounded-xl bg-white/95 backdrop-blur-md border border-[#CBD5E1] shadow-md flex flex-wrap items-center justify-between gap-2 text-[11px] z-10">
+                  <div className="flex items-center space-x-2.5 font-bold text-[#0F172A]">
+                    <span className="flex items-center space-x-1">
+                      <span className="w-3 h-3 rounded-full bg-[#2563EB] inline-block border border-white shadow-xs" />
+                      <span>Your Location</span>
+                    </span>
+                    <span className="flex items-center space-x-1">
+                      <span className="w-3 h-3 rounded-full bg-[#DC2626] inline-block border-2 border-[#FDE047] shadow-xs" />
+                      <span className="text-red-700">Compatible Blood</span>
+                    </span>
+                    <span className="flex items-center space-x-1">
+                      <span className="w-3 h-3 rounded-full bg-[#0F172A] inline-block border border-white shadow-xs" />
+                      <span>Aid Needs</span>
+                    </span>
+                  </div>
+                  <span className="text-[10px] text-slate-500 font-mono">MapLibre GL Engine</span>
+                </div>
               </div>
+
+              {/* Selected Incident Drawer on Map */}
+              {selectedPinReq && (
+                <div className="p-3.5 rounded-xl bg-[#F8FAFC] border border-[#CBD5E1] flex items-center justify-between gap-3 animate-in fade-in duration-150">
+                  <div>
+                    <div className="flex items-center space-x-2 mb-1">
+                      <span className="px-2 py-0.5 rounded text-[10px] font-black uppercase bg-[#0F172A] text-white">
+                        {selectedPinReq.category}
+                      </span>
+                      {selectedPinReq.service_details?.blood_group && (
+                        <span className="px-2 py-0.5 rounded text-[10px] font-black bg-red-600 text-white font-mono">
+                          🩸 {selectedPinReq.service_details.blood_group} ({selectedPinReq.service_details?.units || 2} Units)
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs font-bold text-[#0F172A] line-clamp-1">{selectedPinReq.details || 'Emergency Assistance'}</p>
+                  </div>
+
+                  <div className="flex items-center space-x-2 flex-shrink-0">
+                    <button
+                      onClick={() => handleAccept(selectedPinReq)}
+                      disabled={selectedPinReq.status !== 'requested'}
+                      className="px-3 py-1.5 rounded-xl bg-[#2563EB] hover:bg-[#1D4ED8] text-white text-xs font-extrabold shadow-sm transition disabled:opacity-40 cursor-pointer"
+                    >
+                      {selectedPinReq.status === 'requested' ? 'Accept (1-Tap)' : 'Matched'}
+                    </button>
+                    <button
+                      onClick={() => setSelectedPinReq(null)}
+                      className="text-xs text-[#64748B] hover:text-[#0F172A] font-bold p-1"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           ) : (
             <div className="bg-white border border-[#CBD5E1] p-5 rounded-2xl shadow-sm space-y-4">
@@ -566,10 +727,17 @@ export default function VolunteerMock({ currentUser, onOpenAuthModal }) {
                             </div>
                           )}
 
-                          <div className="flex items-center space-x-2 text-[10px] text-[#64748B] mt-2 font-mono">
-                            <MapPin className="w-3 h-3 text-[#DC2626]" />
-                            <span>Lat: {r.lat.toFixed(4)}, Lng: {r.lng.toFixed(4)}</span>
-                            {r.requester_name && <span>&bull; Requester: {r.requester_name}</span>}
+                          <div className="flex items-center space-x-3 text-[10px] text-[#64748B] mt-2 font-mono">
+                            <span className="flex items-center space-x-1">
+                              <MapPin className="w-3 h-3 text-[#DC2626]" />
+                              <span>{r.lat.toFixed(4)}, {r.lng.toFixed(4)}</span>
+                            </span>
+                            <button
+                              onClick={() => flyToIncident(r)}
+                              className="text-blue-600 font-bold hover:underline cursor-pointer"
+                            >
+                              View on MapLibre &rarr;
+                            </button>
                           </div>
                         </div>
 
@@ -723,3 +891,4 @@ export default function VolunteerMock({ currentUser, onOpenAuthModal }) {
     </div>
   );
 }
+

@@ -55,7 +55,15 @@ select coalesce(r.linked_request_id, r.id) as root_id
    and earth_distance(ll_to_earth(r.lat, r.lng), ll_to_earth($3, $4)) <= $5::float8
    and (
      $1 <> 'blood'
-     or coalesce(r.service_details->>'blood_group', '') = coalesce($6::text, '')
+     or (
+       r.service_details->>'blood_group' is not null
+       and $6::text is not null
+       and r.service_details->>'blood_group' = $6::text
+     )
+     or (
+       r.service_details->>'blood_group' is null
+       and $6::text is null
+     )
    )
  order by r.created_at asc
  limit 1
@@ -159,19 +167,11 @@ async def create_request(body: RequestCreate):
     created = serialize.row(row)
     created["linked_count"] = 0
 
-    if linked_to is None:
-        # A genuinely new emergency: goes onto volunteer feeds.
-        await manager.broadcast(events.GLOBAL, events.NEW_REQUEST, created)
-        # PUSH: candidate trigger -- a high-urgency request with no
-        # available/connected volunteers nearby is exactly the case a WS
-        # broadcast can't help with (nobody's listening). Undecided whether
-        # to push here at all, and if so, to whom -- see
-        # docs/NOTIFICATIONS-HAPTICS-SHORTCUTS.md.
-    else:
-        # A duplicate of a live emergency. Deliberately NOT a `new_request`:
-        # it must not appear as a second card in the volunteer feed. Instead
-        # the ROOT is re-broadcast with a bumped linked_count, which drives
-        # Dev A's "N others also need this here" indicator.
+    # Always broadcast new request to global channel so volunteers and admins see it immediately
+    await manager.broadcast(events.GLOBAL, events.NEW_REQUEST, created)
+
+    if linked_to is not None:
+        # Re-broadcast root with updated duplicate count for "Reported by N users" indicator
         root_out = serialize.row(root)
         created["linked_root"] = root_out
         await manager.broadcast(events.GLOBAL, events.STATUS_UPDATE, root_out)
@@ -183,18 +183,35 @@ async def create_request(body: RequestCreate):
 
 
 @router.get("/requests")
-async def list_requests(status: str | None = None, admin_status: str | None = None,
-                        limit: int = 100):
-    """Admin queue -- urgency first, then oldest-first within an urgency band."""
+async def list_requests(
+    status: str | None = None,
+    admin_status: str | None = None,
+    exclude_expired: bool = False,
+    sort_by: str = "priority",
+    limit: int = 250,
+):
+    """Admin queue and volunteer feed -- urgency first, then newest-first within an urgency band."""
+    order_clause = f"{URGENCY_ORDER_SQL} desc, r.created_at desc"
+    if sort_by == "newest":
+        order_clause = "r.created_at desc"
+
+    where_clauses = [
+        "($1::text is null or r.status = $1)",
+        "($2::text is null or r.admin_status = $2)",
+    ]
+    if exclude_expired:
+        where_clauses.append("r.status <> 'expired'")
+
+    where_sql = " and ".join(where_clauses)
+
     rows = await db.fetch(
         f"""
         select r.*,
                (select count(*) from requests d where d.linked_request_id = r.id)
                  as linked_count
           from requests r
-         where ($1::text is null or r.status = $1)
-           and ($2::text is null or r.admin_status = $2)
-         order by {URGENCY_ORDER_SQL} desc, r.created_at asc
+         where {where_sql}
+         order by {order_clause}
          limit $3
         """,
         status, admin_status, limit,

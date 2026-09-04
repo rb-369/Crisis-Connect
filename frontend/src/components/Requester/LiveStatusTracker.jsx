@@ -55,29 +55,54 @@ export default function LiveStatusTracker({ initialRequest, onNewRequest }) {
   useEffect(() => {
     if (!request?.id) return;
 
+    // If request is already matched/in progress but match_id is not yet in state, fetch fresh request details
+    if (request.status !== 'requested' && !request.match_id) {
+      api.getRequest(request.id).then((fresh) => {
+        if (fresh) {
+          const extractedId = fresh.match_id || fresh.match?.id || fresh.match_info?.id;
+          if (extractedId) {
+            setRequest((prev) => ({
+              ...prev,
+              ...fresh,
+              match_id: extractedId,
+              match_info: fresh.match_info || prev.match_info,
+            }));
+          }
+        }
+      }).catch(console.error);
+    }
+
     // Subscribe to specific request channel: /ws/request/{request.id}
     const wsClient = new CrisisWebSocketClient(
       'request',
       request.id,
       (payload) => {
         if (payload.event === 'status_update' || payload.event === 'matched') {
+          const incoming = payload.data || {};
+          const matchedInfo = incoming.match_info || incoming.request?.match_info || incoming.match;
+          const extractedMatchId = incoming.match_id || incoming.match?.id || matchedInfo?.id;
+
           setRequest((prev) => ({
             ...prev,
-            ...payload.data,
+            ...(incoming.request || {}),
+            ...incoming,
+            status: payload.event === 'matched' ? 'matched' : (incoming.status || prev.status),
+            match_id: extractedMatchId || prev.match_id,
+            match_info: matchedInfo || prev.match_info,
           }));
 
           // When a volunteer/donor accepts the request, alert the user with helper details & chime!
           if (payload.event === 'matched') {
-            const helperName = payload.data.match_info?.helper_name || payload.data.helper_name || 'Verified Volunteer Responder';
-            const helperPhone = payload.data.match_info?.helper_phone || payload.data.helper_phone;
-            const helperBlood = payload.data.match_info?.blood_group || payload.data.blood_group;
+            const helperName = matchedInfo?.helper_name || incoming.helper_name || incoming.helper?.name || 'Verified Volunteer Responder';
+            const helperPhone = matchedInfo?.helper_phone || incoming.helper_phone || incoming.helper?.phone;
+            const helperBlood = matchedInfo?.blood_group || incoming.blood_group || incoming.helper?.blood_type;
 
             playMatchSuccessChime();
             setMatchNotification({
               helperName,
               helperPhone,
               helperBlood,
-              category: payload.data.category,
+              category: incoming.category || incoming.request?.category,
               time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
             });
 
@@ -98,7 +123,7 @@ export default function LiveStatusTracker({ initialRequest, onNewRequest }) {
     return () => {
       wsClient.close();
     };
-  }, [request?.id]);
+  }, [request?.id, request?.status]);
 
   const getStepIndex = (status) => {
     switch (status) {
@@ -115,7 +140,7 @@ export default function LiveStatusTracker({ initialRequest, onNewRequest }) {
 
   const currentIndex = getStepIndex(request.status);
   const isMatchedOrBeyond = currentIndex >= 1;
-  const matchId = request.match_id || `match-${request.id}`;
+  const matchId = request.match_id || request.match?.id || request.match_info?.id;
 
   const toggleVoiceNote = () => {
     if (!audioPlayerRef.current) return;
@@ -478,10 +503,10 @@ export default function LiveStatusTracker({ initialRequest, onNewRequest }) {
             <div className="flex flex-wrap items-center gap-2 text-xs text-[#64748B] mt-1 font-medium">
               <span className="flex items-center space-x-1">
                 <MapPin className="w-3.5 h-3.5 text-[#DC2626]" />
-                <span>GPS: {request.lat?.toFixed(4)}, {request.lng?.toFixed(4)} (Mumbai)</span>
+                <span>GPS: {Number(request.lat || 19.076).toFixed(4)}, {Number(request.lng || 72.877).toFixed(4)} (Mumbai)</span>
               </span>
               <span>&bull;</span>
-              <span className="font-mono">ID: {request.id?.substring(0, 8)}</span>
+              <span className="font-mono">ID: {request.id ? request.id.substring(0, 8) : 'Req'}</span>
             </div>
           </div>
 

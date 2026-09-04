@@ -20,7 +20,9 @@ export default function RequesterChat({ matchId, helperName = 'Emergency Respond
 
     api.getMessages(matchId)
       .then((history) => {
-        setMessages(history);
+        if (Array.isArray(history)) {
+          setMessages(history);
+        }
         setTimeout(scrollToBottom, 100);
       })
       .catch((err) => console.error('Failed to load chat history:', err));
@@ -29,7 +31,7 @@ export default function RequesterChat({ matchId, helperName = 'Emergency Respond
       'match',
       matchId,
       (payload) => {
-        if (payload.event === 'new_message' && payload.data) {
+        if (payload.event === 'new_message' && payload.data && payload.data.id) {
           setMessages((prev) => {
             if (prev.some((m) => m.id === payload.data.id)) return prev;
             return [...prev, payload.data];
@@ -47,18 +49,20 @@ export default function RequesterChat({ matchId, helperName = 'Emergency Respond
   const handleSendMessage = async (e) => {
     e.preventDefault();
     const body = inputText.trim();
-    if (!body || isSending) return;
+    if (!body || isSending || !matchId) return;
 
     setIsSending(true);
     setInputText('');
 
     try {
       const created = await api.sendMessage(matchId, currentDeviceId, body);
-      setMessages((prev) => {
-        if (prev.some((m) => m.id === created.id)) return prev;
-        return [...prev, created];
-      });
-      setTimeout(scrollToBottom, 100);
+      if (created && created.id) {
+        setMessages((prev) => {
+          if (prev.some((m) => m.id === created.id)) return prev;
+          return [...prev, created];
+        });
+        setTimeout(scrollToBottom, 100);
+      }
     } catch (err) {
       console.error('Failed to send message:', err);
     } finally {

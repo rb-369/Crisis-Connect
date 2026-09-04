@@ -217,6 +217,24 @@ async def reseed_demo():
 async def websocket_path_endpoint(websocket: WebSocket, channel_type: str, channel_id: str):
     if channel_type in ("admin", "zones", "volunteers", "global"):
         channel = events.GLOBAL
+    elif channel_type == "match":
+        real_mid = channel_id
+        if channel_id.startswith("match-"):
+            raw_id = channel_id[len("match-"):].strip()
+            try:
+                import uuid
+                parsed = uuid.UUID(raw_id)
+                actual_match_id = await db.fetchval(
+                    "select id from matches where request_id = $1 or id = $1 order by matched_at desc limit 1",
+                    parsed,
+                )
+                if actual_match_id:
+                    real_mid = str(actual_match_id)
+                else:
+                    real_mid = str(parsed)
+            except Exception:
+                pass
+        channel = f"match:{real_mid}"
     else:
         channel = f"{channel_type}:{channel_id}"
 

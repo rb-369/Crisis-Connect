@@ -9,6 +9,7 @@ import AdminMap from './components/Admin/AdminMap';
 import ZoneReportScreen from './components/ZoneReport/ZoneReportScreen';
 import VolunteerMock from './components/Simulation/VolunteerMock';
 import MultiStepAuthModal from './components/Auth/MultiStepAuthModal';
+import ErrorBoundary from './components/Common/ErrorBoundary';
 import { CrisisWebSocketClient } from './services/websocket';
 import { api } from './services/api';
 
@@ -37,10 +38,19 @@ export default function App() {
       'all',
       (payload) => {
         if (payload.event === 'matched' && payload.data) {
+          const incomingReqId = payload.data.id || payload.data.request_id || payload.data.request?.id;
           setActiveRequest((prev) => {
-            if (prev && prev.id === payload.data.id) {
+            if (prev && prev.id === incomingReqId) {
               setRequesterStep('status');
-              return { ...prev, ...payload.data };
+              const extractedMatchId = payload.data.match_id || payload.data.match?.id || payload.data.match_info?.id;
+              return {
+                ...prev,
+                ...(payload.data.request || {}),
+                ...payload.data,
+                status: 'matched',
+                match_id: extractedMatchId || prev.match_id,
+                match_info: payload.data.match_info || payload.data.request?.match_info || prev.match_info,
+              };
             }
             return prev;
           });
@@ -144,17 +154,19 @@ export default function App() {
             )}
 
             {requesterStep === 'status' && activeRequest && (
-              activeRequest.__sos ? (
-                <SosStatusView
-                  result={activeRequest}
-                  onReturnHome={handleStartNewRequest}
-                />
-              ) : (
-                <LiveStatusTracker
-                  initialRequest={activeRequest}
-                  onNewRequest={handleStartNewRequest}
-                />
-              )
+              <ErrorBoundary fallbackTitle="Emergency Request Tracking View">
+                {activeRequest.__sos ? (
+                  <SosStatusView
+                    result={activeRequest}
+                    onReturnHome={handleStartNewRequest}
+                  />
+                ) : (
+                  <LiveStatusTracker
+                    initialRequest={activeRequest}
+                    onNewRequest={handleStartNewRequest}
+                  />
+                )}
+              </ErrorBoundary>
             )}
           </div>
         )}
@@ -188,10 +200,12 @@ export default function App() {
 
         {/* Volunteer Mobile Simulator (Dev B Mock) */}
         {currentTab === 'simulator' && (
-          <VolunteerMock 
-            currentUser={currentUser}
-            onOpenAuthModal={() => handleOpenAuthModal('volunteer')}
-          />
+          <ErrorBoundary fallbackTitle="Volunteer Responder Portal">
+            <VolunteerMock 
+              currentUser={currentUser}
+              onOpenAuthModal={() => handleOpenAuthModal('volunteer')}
+            />
+          </ErrorBoundary>
         )}
       </main>
 

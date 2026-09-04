@@ -157,56 +157,72 @@ export default function RequesterLiveMap({ request, helperInfo }) {
       };
 
       // Add or update MapLibre line layers
-      if (mapInstance.current.getSource('live-route-source')) {
-        mapInstance.current.getSource('live-route-source').setData(routeGeoJson);
-      } else {
-        mapInstance.current.addSource('live-route-source', {
-          type: 'geojson',
-          data: routeGeoJson,
-        });
+      try {
+        if (!mapInstance.current.isStyleLoaded()) return;
+
+        if (mapInstance.current.getSource('live-route-source')) {
+          mapInstance.current.getSource('live-route-source').setData(routeGeoJson);
+        } else {
+          mapInstance.current.addSource('live-route-source', {
+            type: 'geojson',
+            data: routeGeoJson,
+          });
+        }
 
         // Glowing outer casing
-        mapInstance.current.addLayer({
-          id: 'live-route-casing',
-          type: 'line',
-          source: 'live-route-source',
-          layout: { 'line-join': 'round', 'line-cap': 'round' },
-          paint: {
-            'line-color': '#93C5FD',
-            'line-width': 8,
-            'line-opacity': 0.7,
-          },
-        });
+        if (!mapInstance.current.getLayer('live-route-casing') && mapInstance.current.getSource('live-route-source')) {
+          mapInstance.current.addLayer({
+            id: 'live-route-casing',
+            type: 'line',
+            source: 'live-route-source',
+            layout: { 'line-join': 'round', 'line-cap': 'round' },
+            paint: {
+              'line-color': '#93C5FD',
+              'line-width': 8,
+              'line-opacity': 0.7,
+            },
+          });
+        }
 
         // Main primary path
-        mapInstance.current.addLayer({
-          id: 'live-route-main',
-          type: 'line',
-          source: 'live-route-source',
-          layout: { 'line-join': 'round', 'line-cap': 'round' },
-          paint: {
-            'line-color': '#2563EB',
-            'line-width': 4,
-          },
-        });
+        if (!mapInstance.current.getLayer('live-route-main') && mapInstance.current.getSource('live-route-source')) {
+          mapInstance.current.addLayer({
+            id: 'live-route-main',
+            type: 'line',
+            source: 'live-route-source',
+            layout: { 'line-join': 'round', 'line-cap': 'round' },
+            paint: {
+              'line-color': '#2563EB',
+              'line-width': 4,
+            },
+          });
+        }
+
+        // 4. Auto-fit bounds to display both points nicely
+        const minLng = Math.min(reqLng, helperLng);
+        const maxLng = Math.max(reqLng, helperLng);
+        const minLat = Math.min(reqLat, helperLat);
+        const maxLat = Math.max(reqLat, helperLat);
+
+        if (!isNaN(minLng) && !isNaN(maxLng) && !isNaN(minLat) && !isNaN(maxLat)) {
+          mapInstance.current.fitBounds(
+            [
+              [minLng, minLat],
+              [maxLng, maxLat],
+            ],
+            { padding: 70, maxZoom: 15, duration: 800 }
+          );
+        }
+      } catch (err) {
+        console.warn('RequesterLiveMap route rendering warning:', err);
       }
-
-      // 4. Auto-fit bounds to display both points nicely
-      const minLng = Math.min(reqLng, helperLng);
-      const maxLng = Math.max(reqLng, helperLng);
-      const minLat = Math.min(reqLat, helperLat);
-      const maxLat = Math.max(reqLat, helperLat);
-
-      mapInstance.current.fitBounds(
-        [
-          [minLng, minLat],
-          [maxLng, maxLat],
-        ],
-        { padding: 70, maxZoom: 15, duration: 800 }
-      );
     };
 
-    mapInstance.current.on('load', updateRouteAndMarkers);
+    if (mapInstance.current.loaded()) {
+      updateRouteAndMarkers();
+    } else {
+      mapInstance.current.on('load', updateRouteAndMarkers);
+    }
 
     return () => {
       if (mapInstance.current) {

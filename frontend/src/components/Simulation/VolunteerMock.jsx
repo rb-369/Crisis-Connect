@@ -260,15 +260,19 @@ export default function VolunteerMock({ currentUser, onOpenAuthModal }) {
 
   // Listen for match chat
   useEffect(() => {
-    if (!activeMatch) return;
+    if (!activeMatch?.id) return;
 
-    api.getMessages(activeMatch.id).then(setChatMessages).catch(console.error);
+    api.getMessages(activeMatch.id)
+      .then((history) => {
+        if (Array.isArray(history)) setChatMessages(history);
+      })
+      .catch(console.error);
 
     const wsClient = new CrisisWebSocketClient(
       'match',
       activeMatch.id,
       (payload) => {
-        if (payload.event === 'new_message' && payload.data) {
+        if (payload.event === 'new_message' && payload.data && payload.data.id) {
           setChatMessages((prev) => {
             if (prev.some((m) => m.id === payload.data.id)) return prev;
             return [...prev, payload.data];
@@ -404,17 +408,21 @@ export default function VolunteerMock({ currentUser, onOpenAuthModal }) {
     volDot.style.borderRadius = '50%';
     volEl.appendChild(volDot);
 
-    volunteerMarkerRef.current = new maplibregl.Marker({ element: volEl })
-      .setLngLat([selectedDonorProfile.lng, selectedDonorProfile.lat])
-      .setPopup(
-        new maplibregl.Popup({ offset: 25 }).setHTML(`
-          <div style="font-family: sans-serif; padding: 4px;">
-            <div style="font-weight: 800; font-size: 12px; color: #1E40AF;">📍 Your Responder Location</div>
-            <div style="font-size: 11px; color: #475569; margin-top: 2px;">${selectedDonorProfile.name}</div>
-          </div>
-        `)
-      )
-      .addTo(mapInstance.current);
+    const volLng = Number(selectedDonorProfile?.lng);
+    const volLat = Number(selectedDonorProfile?.lat);
+    if (!isNaN(volLng) && !isNaN(volLat)) {
+      volunteerMarkerRef.current = new maplibregl.Marker({ element: volEl })
+        .setLngLat([volLng, volLat])
+        .setPopup(
+          new maplibregl.Popup({ offset: 25 }).setHTML(`
+            <div style="font-family: sans-serif; padding: 4px;">
+              <div style="font-weight: 800; font-size: 12px; color: #1E40AF;">📍 Your Responder Location</div>
+              <div style="font-size: 11px; color: #475569; margin-top: 2px;">${selectedDonorProfile.name}</div>
+            </div>
+          `)
+        )
+        .addTo(mapInstance.current);
+    }
 
     // 2. Incident Request Pins (Filtered to compatible if toggle active)
     const currentIds = new Set();
@@ -430,6 +438,10 @@ export default function VolunteerMock({ currentUser, onOpenAuthModal }) {
 
     visibleRequests.forEach((req) => {
       currentIds.add(req.id);
+      const reqLng = Number(req.lng);
+      const reqLat = Number(req.lat);
+      if (isNaN(reqLng) || isNaN(reqLat)) return;
+
       const isBlood = req.category === 'blood';
       const reqBlood = req.service_details?.blood_group;
       const donorBlood = selectedDonorProfile.bloodGroup;
@@ -475,14 +487,14 @@ export default function VolunteerMock({ currentUser, onOpenAuthModal }) {
             </div>
             ${reqBlood ? `<div style="font-size: 11px; font-weight: 800; color: #DC2626; margin-bottom: 2px;">🩸 Needed: ${reqBlood} (${req.service_details?.units || 2} Units)</div>` : ''}
             <div style="font-size: 11px; font-weight: 600; color: #0F172A; line-height: 1.3;">${req.details || 'Emergency Assistance Request'}</div>
-            <div style="font-size: 10px; color: #64748B; margin-top: 4px;">ID: ${req.id.substring(0, 8)}...</div>
+            <div style="font-size: 10px; color: #64748B; margin-top: 4px;">ID: ${req.id ? req.id.substring(0, 8) : 'Req'}...</div>
           </div>
         `;
 
         const popup = new maplibregl.Popup({ offset: 25 }).setHTML(popupContent);
 
         const marker = new maplibregl.Marker({ element: markerEl })
-          .setLngLat([req.lng, req.lat])
+          .setLngLat([reqLng, reqLat])
           .setPopup(popup)
           .addTo(mapInstance.current);
 
@@ -500,74 +512,92 @@ export default function VolunteerMock({ currentUser, onOpenAuthModal }) {
 
     // 3. Update Shortest Road Navigation Line if active match
     if (activeMatch && mapInstance.current) {
-      fetchShortestRoute(
-        selectedDonorProfile.lng,
-        selectedDonorProfile.lat,
-        activeMatch.lng,
-        activeMatch.lat
-      ).then((route) => {
-        if (!mapInstance.current) return;
+      const volLngNum = Number(selectedDonorProfile?.lng);
+      const volLatNum = Number(selectedDonorProfile?.lat);
+      const matchLngNum = Number(activeMatch?.lng);
+      const matchLatNum = Number(activeMatch?.lat);
 
-        const lineCoords = route.coordinates.length > 0
-          ? route.coordinates
-          : [
-              [selectedDonorProfile.lng, selectedDonorProfile.lat],
-              [activeMatch.lng, activeMatch.lat]
-            ];
+      if (!isNaN(volLngNum) && !isNaN(volLatNum) && !isNaN(matchLngNum) && !isNaN(matchLatNum)) {
+        fetchShortestRoute(
+          volLngNum,
+          volLatNum,
+          matchLngNum,
+          matchLatNum
+        ).then((route) => {
+          if (!mapInstance.current) return;
+          try {
+            if (!mapInstance.current.isStyleLoaded()) return;
 
-        const routeGeoJson = {
-          type: 'Feature',
-          geometry: {
-            type: 'LineString',
-            coordinates: lineCoords
+            const lineCoords = route.coordinates && route.coordinates.length > 0
+              ? route.coordinates
+              : [
+                  [volLngNum, volLatNum],
+                  [matchLngNum, matchLatNum]
+                ];
+
+            const routeGeoJson = {
+              type: 'Feature',
+              geometry: {
+                type: 'LineString',
+                coordinates: lineCoords
+              }
+            };
+
+            if (mapInstance.current.getSource('route-source')) {
+              mapInstance.current.getSource('route-source').setData(routeGeoJson);
+            } else {
+              mapInstance.current.addSource('route-source', {
+                type: 'geojson',
+                data: routeGeoJson
+              });
+            }
+
+            // Ensure route-casing is present
+            if (!mapInstance.current.getLayer('route-casing') && mapInstance.current.getSource('route-source')) {
+              mapInstance.current.addLayer({
+                id: 'route-casing',
+                type: 'line',
+                source: 'route-source',
+                layout: { 'line-join': 'round', 'line-cap': 'round' },
+                paint: {
+                  'line-color': '#93C5FD',
+                  'line-width': 8,
+                  'line-opacity': 0.7
+                }
+              });
+            }
+
+            // Ensure route-line is present
+            if (!mapInstance.current.getLayer('route-line') && mapInstance.current.getSource('route-source')) {
+              mapInstance.current.addLayer({
+                id: 'route-line',
+                type: 'line',
+                source: 'route-source',
+                layout: { 'line-join': 'round', 'line-cap': 'round' },
+                paint: {
+                  'line-color': '#2563EB',
+                  'line-width': 4
+                }
+              });
+            }
+
+            // Fit bounds safely so both points and path are in full view
+            const minLng = Math.min(volLngNum, matchLngNum);
+            const maxLng = Math.max(volLngNum, matchLngNum);
+            const minLat = Math.min(volLatNum, matchLatNum);
+            const maxLat = Math.max(volLatNum, matchLatNum);
+
+            if (!isNaN(minLng) && !isNaN(maxLng) && !isNaN(minLat) && !isNaN(maxLat)) {
+              mapInstance.current.fitBounds(
+                [[minLng, minLat], [maxLng, maxLat]],
+                { padding: 70, maxZoom: 15, duration: 800 }
+              );
+            }
+          } catch (err) {
+            console.warn('MapLibre route rendering warning:', err);
           }
-        };
-
-        if (mapInstance.current.getSource('route-source')) {
-          mapInstance.current.getSource('route-source').setData(routeGeoJson);
-        } else {
-          mapInstance.current.addSource('route-source', {
-            type: 'geojson',
-            data: routeGeoJson
-          });
-
-          // Outer glowing casing
-          mapInstance.current.addLayer({
-            id: 'route-casing',
-            type: 'line',
-            source: 'route-source',
-            layout: { 'line-join': 'round', 'line-cap': 'round' },
-            paint: {
-              'line-color': '#93C5FD',
-              'line-width': 8,
-              'line-opacity': 0.7
-            }
-          });
-
-          // Inner primary navigation path
-          mapInstance.current.addLayer({
-            id: 'route-line',
-            type: 'line',
-            source: 'route-source',
-            layout: { 'line-join': 'round', 'line-cap': 'round' },
-            paint: {
-              'line-color': '#2563EB',
-              'line-width': 4
-            }
-          });
-        }
-
-        // Fit bounds so both points and path are in full view
-        const minLng = Math.min(selectedDonorProfile.lng, activeMatch.lng);
-        const maxLng = Math.max(selectedDonorProfile.lng, activeMatch.lng);
-        const minLat = Math.min(selectedDonorProfile.lat, activeMatch.lat);
-        const maxLat = Math.max(selectedDonorProfile.lat, activeMatch.lat);
-
-        mapInstance.current.fitBounds(
-          [[minLng, minLat], [maxLng, maxLat]],
-          { padding: 70, maxZoom: 15, duration: 800 }
-        );
-      });
+        }).catch((err) => console.warn('fetchShortestRoute error:', err));
+      }
     }
   }, [visibleRequests, selectedDonorProfile, viewMode, activeMatch]);
 
@@ -600,12 +630,20 @@ export default function VolunteerMock({ currentUser, onOpenAuthModal }) {
       });
 
       // Fly map to match incident if map is open
-      if (mapInstance.current) {
-        mapInstance.current.flyTo({
-          center: [matchedReq.lng, matchedReq.lat],
-          zoom: 14.5,
-          duration: 900
-        });
+      if (mapInstance.current && viewMode === 'map') {
+        const destLng = Number(matchedReq?.lng);
+        const destLat = Number(matchedReq?.lat);
+        if (!isNaN(destLng) && !isNaN(destLat)) {
+          try {
+            mapInstance.current.flyTo({
+              center: [destLng, destLat],
+              zoom: 14.5,
+              duration: 900,
+            });
+          } catch (err) {
+            console.warn('flyTo warning:', err);
+          }
+        }
       }
 
       fetchRequests();
@@ -621,7 +659,7 @@ export default function VolunteerMock({ currentUser, onOpenAuthModal }) {
   };
 
   const handleUpdateStatus = async (status) => {
-    if (!activeMatch) return;
+    if (!activeMatch?.requestId) return;
     try {
       await api.patchRequest(activeMatch.requestId, { status });
       fetchRequests();
@@ -632,14 +670,16 @@ export default function VolunteerMock({ currentUser, onOpenAuthModal }) {
 
   const handleSendVolunteerMessage = async (e) => {
     e.preventDefault();
-    if (!chatInput.trim() || !activeMatch) return;
+    if (!chatInput.trim() || !activeMatch?.id) return;
     const body = chatInput.trim();
     setChatInput('');
     try {
       const sent = await api.sendMessage(activeMatch.id, 'volunteer-mock-id', body);
-      setChatMessages((prev) => [...prev, sent]);
+      if (sent && sent.id) {
+        setChatMessages((prev) => [...prev, sent]);
+      }
     } catch (err) {
-      console.error(err);
+      console.error('Send message error:', err);
     }
   };
 
@@ -1131,7 +1171,7 @@ export default function VolunteerMock({ currentUser, onOpenAuthModal }) {
                             <div className="flex items-center space-x-3 text-[10px] text-[#64748B] mt-2 font-mono">
                               <span className="flex items-center space-x-1">
                                 <MapPin className="w-3 h-3 text-[#DC2626]" />
-                                <span>{r.lat.toFixed(4)}, {r.lng.toFixed(4)}</span>
+                                <span>{Number(r.lat || 0).toFixed(4)}, {Number(r.lng || 0).toFixed(4)}</span>
                               </span>
                               <button
                                 onClick={() => flyToIncident(r)}
@@ -1200,7 +1240,7 @@ export default function VolunteerMock({ currentUser, onOpenAuthModal }) {
               {activeMatch ? (
                 <span className="text-xs text-[#15803D] font-bold flex items-center space-x-1.5">
                   <span className="w-2 h-2 rounded-full bg-[#16A34A] animate-pulse" />
-                  <span>Matched: {activeMatch.requestId.substring(0, 8)}...</span>
+                  <span>Matched: {activeMatch.requestId ? activeMatch.requestId.substring(0, 8) : 'Active'}...</span>
                 </span>
               ) : (
                 <span className="text-xs text-[#94A3B8]">No active dispatch</span>

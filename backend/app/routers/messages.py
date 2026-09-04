@@ -11,12 +11,37 @@ from ..ws import manager
 router = APIRouter(tags=["messages"])
 
 
+import uuid
+
+async def _resolve_match_id(raw_mid: str) -> uuid.UUID:
+    """Resolve a match identifier safely.
+    Handles standard match UUID, 'match-{id}' prefix, and request_id fallback.
+    """
+    clean = str(raw_mid).strip()
+    if clean.startswith("match-"):
+        clean = clean[len("match-"):].strip()
+
+    parsed = parse_uuid(clean, "match_id")
+
+    # 1. Direct match ID lookup
+    is_match = await db.fetchval("select exists(select 1 from matches where id = $1)", parsed)
+    if is_match:
+        return parsed
+
+    # 2. Check if clean is a request_id in matches
+    match_from_req = await db.fetchval(
+        "select id from matches where request_id = $1 order by matched_at desc limit 1",
+        parsed,
+    )
+    if match_from_req:
+        return match_from_req
+
+    raise HTTPException(404, "match not found")
+
+
 @router.post("/messages", status_code=201)
 async def create_message(body: MessageCreate):
-    mid = parse_uuid(body.match_id, "match_id")
-    # Checked explicitly so a bad match_id is a 404, not an FK 500.
-    if not await db.fetchval("select exists(select 1 from matches where id = $1)", mid):
-        raise HTTPException(404, "match not found")
+    mid = await _resolve_match_id(body.match_id)
 
     row = await db.fetchrow(
         """
@@ -38,7 +63,7 @@ async def create_message(body: MessageCreate):
 @router.get("/messages/{match_id}")
 async def list_messages(match_id: str, limit: int = Query(500, gt=0, le=2000)):
     """Chat history, oldest first -- what a chat screen renders top to bottom."""
-    mid = parse_uuid(match_id, "match_id")
+    mid = await _resolve_match_id(match_id)
     rows = await db.fetch(
         "select * from messages where match_id = $1 order by sent_at asc limit $2",
         mid, limit)

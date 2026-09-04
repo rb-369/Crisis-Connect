@@ -324,13 +324,26 @@ async def get_request(request_id: str):
     m = await db.fetchrow(
         """
         select m.*, h.name as helper_name, h.role as helper_role,
-               h.org_name as helper_org, h.phone as helper_phone
+               h.org_name as helper_org, h.phone as helper_phone,
+               h.blood_type as helper_blood_type, h.lat as helper_lat, h.lng as helper_lng
           from matches m join helpers h on h.id = m.helper_id
          where m.request_id = $1
         """,
         rid,
     )
-    out["match"] = serialize.row(m)
+    match_row = serialize.row(m)
+    out["match"] = match_row
+    if match_row:
+        out["match_id"] = match_row["id"]
+        out["match_info"] = {
+            "id": match_row["id"],
+            "helper_name": match_row.get("helper_name"),
+            "helper_phone": match_row.get("helper_phone"),
+            "helper_role": match_row.get("helper_role"),
+            "blood_group": match_row.get("helper_blood_type"),
+            "helper_lat": match_row.get("helper_lat"),
+            "helper_lng": match_row.get("helper_lng"),
+        }
     return out
 
 
@@ -486,6 +499,7 @@ async def accept_request(request_id: str, body: AcceptBody | None = None):
     req_out = serialize.row(claimed)
     match_out = serialize.row(match)
     helper_out = serialize.row(helper)
+    req_out["match_id"] = match_out["id"]
     req_out["match_info"] = {
         "id": match_out["id"],
         "helper_name": helper_out.get("name"),
@@ -496,9 +510,13 @@ async def accept_request(request_id: str, body: AcceptBody | None = None):
         "helper_lng": helper_out.get("lng"),
     }
     payload = {
+        "id": str(rid),
+        "request_id": str(rid),
+        "match_id": match_out["id"],
         "status": "matched",
         "request": req_out,
         "match": match_out,
+        "match_info": req_out["match_info"],
         "helper": {
             "id": helper_out["id"],
             "name": helper_out.get("name"),

@@ -449,21 +449,37 @@ export default function VolunteerMock({ currentUser, onOpenAuthModal }) {
       const color = colorMap[req.category] || '#DC2626';
 
       if (!markersRef.current[req.id]) {
+        const isCompleted = req.status === 'completed' || req.status === 'resolved';
+        const isMatched = req.status === 'matched' || req.status === 'en_route' || req.status === 'in_progress';
+        const isHigh = req.urgency === 'high' || req.urgency === 'critical';
+
         const markerEl = document.createElement('div');
         markerEl.className = 'maplibre-incident-pin';
-        markerEl.style.width = isCompatible ? '36px' : '30px';
-        markerEl.style.height = isCompatible ? '36px' : '30px';
+        markerEl.style.width = isHigh || isCompatible ? '38px' : '32px';
+        markerEl.style.height = isHigh || isCompatible ? '38px' : '32px';
         markerEl.style.borderRadius = '50%';
-        markerEl.style.backgroundColor = color;
+        markerEl.style.backgroundColor = isCompleted ? '#16A34A' : isMatched ? '#2563EB' : color;
         markerEl.style.border = isCompatible ? '3.5px solid #FDE047' : '2.5px solid #FFFFFF';
-        markerEl.style.boxShadow = '0 4px 12px rgba(15,23,42,0.4)';
+        markerEl.style.boxShadow = isHigh 
+          ? '0 0 16px rgba(220, 38, 38, 0.9)' 
+          : isCompleted 
+          ? '0 4px 12px rgba(22, 163, 74, 0.5)'
+          : isMatched 
+          ? '0 4px 14px rgba(37, 99, 235, 0.6)'
+          : '0 4px 12px rgba(15,23,42,0.4)';
         markerEl.style.display = 'flex';
         markerEl.style.alignItems = 'center';
         markerEl.style.justifyContent = 'center';
         markerEl.style.cursor = 'pointer';
 
-        if (req.urgency === 'high' || isCompatible) {
-          markerEl.style.animation = 'urgent-radar 1.6s infinite';
+        if (isHigh) {
+          markerEl.classList.add('pin-critical-sos');
+        } else if (isCompleted) {
+          markerEl.classList.add('pin-completed');
+        } else if (isMatched) {
+          markerEl.classList.add('pin-volunteer');
+        } else {
+          markerEl.classList.add('pin-urgent-radar');
         }
 
         const dot = document.createElement('div');

@@ -64,18 +64,32 @@ export default function RequesterLiveMap({ request, helperInfo }) {
       // 1. Add/Update Requester Marker
       if (requesterMarkerRef.current) requesterMarkerRef.current.remove();
 
+      const isCompleted = request?.status === 'completed' || request?.status === 'resolved';
+      const isHigh = request?.urgency === 'high' || request?.urgency === 'critical';
+
       const reqEl = document.createElement('div');
       reqEl.className = 'requester-dest-marker';
-      reqEl.style.width = '36px';
-      reqEl.style.height = '36px';
+      reqEl.style.width = '38px';
+      reqEl.style.height = '38px';
       reqEl.style.borderRadius = '50%';
-      reqEl.style.backgroundColor = '#DC2626';
+      reqEl.style.backgroundColor = isCompleted ? '#16A34A' : '#DC2626';
       reqEl.style.border = '3.5px solid #FFFFFF';
-      reqEl.style.boxShadow = '0 4px 14px rgba(220,38,38,0.6)';
+      reqEl.style.boxShadow = isHigh 
+        ? '0 0 16px rgba(220, 38, 38, 0.9)' 
+        : isCompleted 
+        ? '0 4px 14px rgba(22, 163, 74, 0.6)' 
+        : '0 4px 14px rgba(220,38,38,0.6)';
       reqEl.style.display = 'flex';
       reqEl.style.alignItems = 'center';
       reqEl.style.justifyContent = 'center';
-      reqEl.style.animation = 'urgent-radar 1.6s infinite';
+
+      if (isHigh) {
+        reqEl.classList.add('pin-critical-sos');
+      } else if (isCompleted) {
+        reqEl.classList.add('pin-completed');
+      } else {
+        reqEl.classList.add('pin-urgent-radar');
+      }
 
       const reqDot = document.createElement('div');
       reqDot.style.width = '10px';
@@ -89,7 +103,9 @@ export default function RequesterLiveMap({ request, helperInfo }) {
         .setPopup(
           new maplibregl.Popup({ offset: 25 }).setHTML(`
             <div style="font-family: sans-serif; padding: 4px;">
-              <div style="font-weight: 800; font-size: 12px; color: #991B1B;">🏥 Your Location / Destination</div>
+              <div style="font-weight: 800; font-size: 12px; color: ${isCompleted ? '#15803D' : '#991B1B'};">
+                ${isCompleted ? '✓ Emergency Resolved' : '🏥 Your Location / Destination'}
+              </div>
               <div style="font-size: 11px; color: #475569; margin-top: 2px;">
                 ${request?.service_details?.hospital_name || request?.details || 'Designated Aid Site'}
               </div>
@@ -102,7 +118,7 @@ export default function RequesterLiveMap({ request, helperInfo }) {
       if (helperMarkerRef.current) helperMarkerRef.current.remove();
 
       const helperEl = document.createElement('div');
-      helperEl.className = 'helper-live-marker';
+      helperEl.className = 'helper-live-marker pin-volunteer';
       helperEl.style.width = '38px';
       helperEl.style.height = '38px';
       helperEl.style.borderRadius = '50%';

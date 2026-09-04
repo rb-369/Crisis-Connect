@@ -12,7 +12,7 @@ import MultiStepAuthModal from './components/Auth/MultiStepAuthModal';
 import ErrorBoundary from './components/Common/ErrorBoundary';
 import { CrisisWebSocketClient } from './services/websocket';
 import { api } from './services/api';
-import webLogo from './web-logo.jpeg';
+import webLogo from './web-logo-2.jpeg';
 
 export default function App() {
   const [currentTab, setCurrentTab] = useState('requester');

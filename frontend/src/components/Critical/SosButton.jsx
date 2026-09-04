@@ -277,7 +277,7 @@ export default function SosButton({ onSosSent }) {
             )}
           </div>
           <div className="text-xs font-mono text-[#64748B] truncate">
-            Coordinates: {coords.lat.toFixed(5)}, {coords.lng.toFixed(5)}
+            Coordinates: {Number(coords?.lat || 19.076).toFixed(5)}, {Number(coords?.lng || 72.8777).toFixed(5)}
           </div>
         </div>
       </div>

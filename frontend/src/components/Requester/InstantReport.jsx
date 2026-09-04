@@ -276,7 +276,7 @@ export default function InstantReport({ onRequestCreated }) {
               )}
             </div>
             <div className="text-xs font-mono text-[#64748B]">
-              Coordinates: {coords.lat.toFixed(5)}, {coords.lng.toFixed(5)} (Mumbai)
+              Coordinates: {Number(coords?.lat || 19.076).toFixed(5)}, {Number(coords?.lng || 72.8777).toFixed(5)} (Mumbai)
             </div>
           </div>
         </div>

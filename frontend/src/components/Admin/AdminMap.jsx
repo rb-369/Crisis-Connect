@@ -458,7 +458,7 @@ export default function AdminMap() {
                 <span className="text-xs uppercase font-black tracking-wider bg-white/20 px-2 py-0.5 rounded">
                   🚨 New Incoming SOS: {incomingAlert.category}
                 </span>
-                <span className="text-xs font-mono">{incomingAlert.lat?.toFixed(4)}, {incomingAlert.lng?.toFixed(4)} (Mumbai)</span>
+                <span className="text-xs font-mono">{Number(incomingAlert.lat || 0).toFixed(4)}, {Number(incomingAlert.lng || 0).toFixed(4)} (Mumbai)</span>
               </div>
               <p className="text-xs font-medium text-white/90 mt-0.5">
                 {incomingAlert.details || '1-Tap Rapid SOS Received. Click to fly to pin on MapLibre.'}
@@ -617,7 +617,7 @@ export default function AdminMap() {
 
                 {selectedItem.lat && (
                   <div className="text-[11px] font-mono text-[#64748B] pt-1 border-t border-[#E2E8F0]">
-                    Location: Mumbai ({selectedItem.lat?.toFixed(4)}, {selectedItem.lng?.toFixed(4)})
+                    Location: Mumbai ({Number(selectedItem.lat || 0).toFixed(4)}, {Number(selectedItem.lng || 0).toFixed(4)})
                   </div>
                 )}
 

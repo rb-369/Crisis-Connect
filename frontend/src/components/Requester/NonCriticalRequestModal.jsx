@@ -948,7 +948,7 @@ export default function NonCriticalRequestModal({ category, coords, onClose, onR
           <div className="text-[11px] text-[#64748B] flex items-center space-x-1.5 font-mono">
             <MapPin className="w-3.5 h-3.5 text-[#DC2626]" />
             <span>
-              Auto-attached GPS Location: {coords?.lat ? coords.lat.toFixed(4) : '19.0760'}, {coords?.lng ? coords.lng.toFixed(4) : '72.8777'} (Mumbai)
+              Auto-attached GPS Location: {Number(coords?.lat || 19.076).toFixed(4)}, {Number(coords?.lng || 72.8777).toFixed(4)} (Mumbai)
             </span>
           </div>
 

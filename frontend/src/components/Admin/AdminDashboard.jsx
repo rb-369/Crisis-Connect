@@ -356,7 +356,7 @@ export default function AdminDashboard({ onOpenMap, currentUser, onOpenAuthModal
                       )}
                       <span className="flex items-center space-x-1">
                         <MapPin className="w-3.5 h-3.5 text-[#DC2626]" />
-                        <span className="font-mono">{req.lat?.toFixed(4)}, {req.lng?.toFixed(4)}</span>
+                        <span className="font-mono">{Number(req.lat || 0).toFixed(4)}, {Number(req.lng || 0).toFixed(4)}</span>
                       </span>
                       <span className="flex items-center space-x-1">
                         <Clock className="w-3.5 h-3.5 text-[#64748B]" />

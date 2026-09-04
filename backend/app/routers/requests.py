@@ -53,6 +53,10 @@ select coalesce(r.linked_request_id, r.id) as root_id
    and r.status not in ('resolved', 'expired')
    and r.created_at >= now() - ($2::int * interval '1 minute')
    and earth_distance(ll_to_earth(r.lat, r.lng), ll_to_earth($3, $4)) <= $5::float8
+   and (
+     $1 <> 'blood'
+     or coalesce(r.service_details->>'blood_group', '') = coalesce($6::text, '')
+   )
  order by r.created_at asc
  limit 1
 """
@@ -116,9 +120,11 @@ async def create_request(body: RequestCreate):
                 )
             admin_status = "flagged" if far_from_zones else "pending"
 
+            blood_group = (body.service_details or {}).get("blood_group") if body.category == "blood" else None
             dup = await conn.fetchrow(
                 DUPLICATE_SQL, body.category, config.DUPLICATE_WINDOW_MIN,
                 body.lat, body.lng, float(config.DUPLICATE_RADIUS_M),
+                blood_group,
             )
             linked_to = dup["root_id"] if dup is not None else None
 

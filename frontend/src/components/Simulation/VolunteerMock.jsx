@@ -213,9 +213,38 @@ export default function VolunteerMock({ currentUser, onOpenAuthModal }) {
             });
           }
         } else if (payload.event === 'status_update' || payload.event === 'matched') {
-          setRequests((prev) =>
-            prev.map((r) => (r.id === payload.data.id ? { ...r, ...payload.data } : r))
-          );
+          const updated = payload.data;
+          if (updated) {
+            setRequests((prev) => {
+              const exists = prev.some((r) => r.id === updated.id);
+              if (!exists) {
+                return [updated, ...prev];
+              }
+              return prev.map((r) => (r.id === updated.id ? { ...r, ...updated } : r));
+            });
+
+            // If this update was an aggregated cluster duplicate linking:
+            if (payload.event === 'status_update' && (updated.linked_count || 0) > 0) {
+              const isBlood = updated.category === 'blood';
+              const reqBlood = updated.service_details?.blood_group;
+              const currentProfile = selectedDonorProfileRef.current;
+              const donorBlood = currentProfile?.bloodGroup;
+              const isCompatible = isBlood && donorBlood ? isDonorCompatible(donorBlood, reqBlood) : true;
+
+              if (isCompatible) {
+                playEmergencyAlertChime();
+                setIncomingAlert({
+                  title: '👥 Co-Located Cluster Alert!',
+                  hospital: updated.service_details?.hospital_name || 'Emergency Dispatch',
+                  bloodGroup: reqBlood,
+                  units: updated.service_details?.units || 2,
+                  donorBlood: donorBlood,
+                  details: `This emergency was reported by ${updated.linked_count + 1} users in this area!`,
+                  req: updated,
+                });
+              }
+            }
+          }
         }
       }
     );
@@ -1034,7 +1063,7 @@ export default function VolunteerMock({ currentUser, onOpenAuthModal }) {
                               {r.linked_count > 0 && (
                                 <span className="px-2 py-0.5 rounded-md bg-amber-100 text-amber-800 font-extrabold text-[10px] flex items-center space-x-1">
                                   <Users className="w-3 h-3 text-amber-600" />
-                                  <span>👥 {r.linked_count} Nearby Reports</span>
+                                  <span>👥 Reported by {r.linked_count + 1} users</span>
                                 </span>
                               )}
 
@@ -1053,7 +1082,7 @@ export default function VolunteerMock({ currentUser, onOpenAuthModal }) {
                               <div className="mt-1.5 p-2 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-[11px] flex items-center space-x-2">
                                 <Users className="w-3.5 h-3.5 text-amber-600 flex-shrink-0" />
                                 <span>
-                                  <strong>Aggregated Emergency Cluster:</strong> {r.linked_count} other resident{r.linked_count > 1 ? 's' : ''} co-located in this block. Coordinated aid delivery recommended.
+                                  <strong>Combined Emergency:</strong> This was reported by {r.linked_count + 1} users in this immediate area. Coordinated aid delivery recommended.
                                 </span>
                               </div>
                             )}

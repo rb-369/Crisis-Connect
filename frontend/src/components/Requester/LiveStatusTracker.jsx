@@ -351,10 +351,10 @@ export default function LiveStatusTracker({ initialRequest, onNewRequest }) {
           </div>
           <div className="text-xs">
             <span className="font-extrabold text-amber-900">
-              Corroborated Incident Cluster:
+              Combined Area Emergency:
             </span>{' '}
             <span className="text-amber-800">
-              {request.linked_count} other resident{request.linked_count > 1 ? 's' : ''} in your immediate area also requested {request.category}. Your reports are combined into a high-priority dispatch cluster.
+              This emergency was reported by {request.linked_count + 1} users in your immediate area. Your reports are combined together so responders can deliver coordinated aid.
             </span>
           </div>
         </div>

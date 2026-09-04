@@ -22,7 +22,7 @@ const ICONS = {
   volunteer: `
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
       <rect x="1" y="3" width="15" height="13"/>
-      <polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/>
+      <polygon points="16 8 20 8 23 11 23 16 16 16 8"/>
       <circle cx="5.5" cy="18.5" r="2.5"/>
       <circle cx="18.5" cy="18.5" r="2.5"/>
     </svg>
@@ -79,14 +79,25 @@ export function createMapLibrePin({
   onExpire, // Callback when 2-minute timer for completed pin finishes
   onManualRemove, // Callback for manual remove action
 }) {
+  // Outer Container: MapLibre GL JS controls position: absolute and transform: translate(x,y)
   const container = document.createElement('div');
-  container.className = 'maplibre-custom-pin-wrapper';
-  container.style.position = 'relative';
-  container.style.cursor = 'pointer';
+  container.className = 'maplibregl-marker maplibre-custom-pin-anchor';
+  container.style.width = '44px';
+  container.style.height = '44px';
   container.style.display = 'flex';
-  container.style.flexDirection = 'column';
   container.style.alignItems = 'center';
+  container.style.justifyContent = 'center';
+  container.style.cursor = 'pointer';
   container.style.userSelect = 'none';
+
+  // Inner Pin Content Wrapper (allows relative positioning for badges)
+  const pinWrapper = document.createElement('div');
+  pinWrapper.className = 'maplibre-pin-content';
+  pinWrapper.style.position = 'relative';
+  pinWrapper.style.display = 'flex';
+  pinWrapper.style.flexDirection = 'column';
+  pinWrapper.style.alignItems = 'center';
+  pinWrapper.style.justifyContent = 'center';
 
   // Inner Pin Bubble
   const pinBubble = document.createElement('div');
@@ -95,7 +106,7 @@ export function createMapLibrePin({
   pinBubble.style.alignItems = 'center';
   pinBubble.style.justifyContent = 'center';
   pinBubble.style.borderRadius = '50%';
-  pinBubble.style.transition = 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)';
+  pinBubble.style.transition = 'transform 0.2s ease, box-shadow 0.2s ease';
   pinBubble.style.zIndex = '2';
 
   let timerInterval = null;
@@ -115,7 +126,7 @@ export function createMapLibrePin({
     pinBubble.classList.add('pin-hazard');
     pinBubble.innerHTML = ICONS.hazard;
 
-    // Small Top Severity Tag
+    // Severity Tag
     const tag = document.createElement('div');
     tag.style.position = 'absolute';
     tag.style.bottom = '-18px';
@@ -129,8 +140,9 @@ export function createMapLibrePin({
     tag.style.borderRadius = '4px';
     tag.style.boxShadow = '0 2px 6px rgba(0,0,0,0.3)';
     tag.style.whiteSpace = 'nowrap';
+    tag.style.zIndex = '3';
     tag.innerText = `⚠️ ${severity}`;
-    container.appendChild(tag);
+    pinWrapper.appendChild(tag);
   }
 
   // 2. CRITICAL SOS (Glowing Red Pin with High Urgency Radar Glow)
@@ -156,8 +168,9 @@ export function createMapLibrePin({
     sosBadge.style.borderRadius = '9999px';
     sosBadge.style.boxShadow = '0 2px 8px rgba(153, 27, 27, 0.7)';
     sosBadge.style.whiteSpace = 'nowrap';
+    sosBadge.style.zIndex = '3';
     sosBadge.innerText = 'CRITICAL SOS';
-    container.appendChild(sosBadge);
+    pinWrapper.appendChild(sosBadge);
   }
 
   // 3. NORMAL EMERGENCY (Solid Red Emergency Pin)
@@ -183,8 +196,9 @@ export function createMapLibrePin({
     catBadge.style.padding = '1px 5px';
     catBadge.style.borderRadius = '4px';
     catBadge.style.whiteSpace = 'nowrap';
+    catBadge.style.zIndex = '3';
     catBadge.innerText = item.category || 'SOS';
-    container.appendChild(catBadge);
+    pinWrapper.appendChild(catBadge);
   }
 
   // 4. ASSIGNED VOLUNTEER (Vibrant Blue Responder Pin)
@@ -209,8 +223,9 @@ export function createMapLibrePin({
     volBadge.style.borderRadius = '4px';
     volBadge.style.boxShadow = '0 2px 6px rgba(0,0,0,0.2)';
     volBadge.style.whiteSpace = 'nowrap';
+    volBadge.style.zIndex = '3';
     volBadge.innerText = 'DISPATCHED';
-    container.appendChild(volBadge);
+    pinWrapper.appendChild(volBadge);
   }
 
   // 5. COMPLETED PIN (Green Pin with 2-Minute Timer then Auto-Remove)
@@ -240,6 +255,7 @@ export function createMapLibrePin({
     timerBadge.style.borderRadius = '4px';
     timerBadge.style.boxShadow = '0 2px 6px rgba(0,0,0,0.2)';
     timerBadge.style.whiteSpace = 'nowrap';
+    timerBadge.style.zIndex = '3';
 
     const updateTimerText = () => {
       const remainingSec = Math.ceil(remainingMs / 1000);
@@ -249,7 +265,7 @@ export function createMapLibrePin({
     };
 
     updateTimerText();
-    container.appendChild(timerBadge);
+    pinWrapper.appendChild(timerBadge);
 
     // Fade out and remove function
     const triggerExpiry = () => {
@@ -280,7 +296,8 @@ export function createMapLibrePin({
     }
   }
 
-  container.appendChild(pinBubble);
+  pinWrapper.appendChild(pinBubble);
+  container.appendChild(pinWrapper);
 
   // Click handler
   container.addEventListener('click', (e) => {
@@ -296,9 +313,9 @@ export function createMapLibrePin({
     pinBubble.style.transform = 'scale(1) translateY(0)';
   });
 
-  // Extract coordinates
-  const lat = parseFloat(item.lat || item.properties?.lat || (item.geometry?.coordinates?.[0]?.[0]?.[1]) || 19.076);
-  const lng = parseFloat(item.lng || item.properties?.lng || (item.geometry?.coordinates?.[0]?.[0]?.[0]) || 72.877);
+  // Extract coordinates (GeoJSON [lng, lat] or request lat/lng)
+  const lat = parseFloat(item.lat !== undefined ? item.lat : (item.properties?.lat || 19.076));
+  const lng = parseFloat(item.lng !== undefined ? item.lng : (item.properties?.lng || 72.877));
 
   const marker = new maplibregl.Marker({ element: container, anchor: 'center' }).setLngLat([
     lng,

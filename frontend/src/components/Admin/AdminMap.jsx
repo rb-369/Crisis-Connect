@@ -138,11 +138,21 @@ export default function AdminMap() {
     map.current.addControl(new maplibregl.NavigationControl(), 'top-right');
 
     map.current.on('load', () => {
+      if (map.current) {
+        map.current.resize();
+      }
       // Add Sachet GeoJSON Source if already fetched
       if (sachetGeoJson) {
         addSachetLayers(sachetGeoJson);
       }
     });
+
+    // Ensure map container renders with full dimensions
+    setTimeout(() => {
+      if (map.current) {
+        map.current.resize();
+      }
+    }, 250);
 
     loadData();
 

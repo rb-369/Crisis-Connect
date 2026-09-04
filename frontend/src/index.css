@@ -191,3 +191,15 @@
   color: #0F172A !important;
   background-color: transparent !important;
 }
+
+/* Custom MapLibre Marker Anchor Rules */
+.maplibre-custom-pin-anchor {
+  position: absolute !important;
+  pointer-events: auto !important;
+  will-change: transform;
+  z-index: 10;
+}
+.maplibre-custom-pin-anchor:hover {
+  z-index: 30;
+}
+

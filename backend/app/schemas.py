@@ -7,7 +7,7 @@ from typing import Any, Literal, Optional
 from pydantic import BaseModel, Field, field_validator
 
 from .blood import VALID_BLOOD_TYPES
-from .config import CRITICAL_CATEGORIES, NON_CRITICAL_CATEGORIES
+from .config import CRITICAL_CATEGORIES, NON_CRITICAL_CATEGORIES, VALID_CATEGORIES
 
 Category = str
 Urgency = Literal["low", "normal", "high", "critical"]
@@ -48,9 +48,8 @@ class RequestCreate(BaseModel):
     @field_validator("category")
     @classmethod
     def _cat(cls, v: str) -> str:
-        # Critical categories go through POST /sos, not here -- keeps the
-        # two flows' domains mutually exclusive rather than overlapping.
-        return _validate_category(v, NON_CRITICAL_CATEGORIES)
+        # Accepts any valid category across critical and non-critical
+        return _validate_category(v, VALID_CATEGORIES)
 
 
 class SosCreate(BaseModel):

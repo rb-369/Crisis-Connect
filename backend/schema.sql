@@ -136,6 +136,15 @@ create table if not exists incidents (
 
 create index if not exists incidents_status_idx on incidents (status, created_at desc);
 
+create table if not exists incident_events (
+  id uuid primary key default gen_random_uuid(),
+  incident_id uuid references incidents(id) on delete cascade not null,
+  status text not null,
+  created_at timestamptz default now()
+);
+
+create index if not exists incident_events_incident_idx on incident_events (incident_id, created_at);
+
 alter table requests add column if not exists incident_id uuid references incidents(id);
 alter table requests add column if not exists severity_class text; -- 'critical' | 'non_critical'
 -- (renamed to service_details in the v2 block below)

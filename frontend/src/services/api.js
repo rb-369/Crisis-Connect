@@ -53,7 +53,11 @@ async function fetchJson(endpoint, options = {}) {
     let parsed = null;
     try {
       parsed = await response.json();
-      errorDetail = parsed.detail || JSON.stringify(parsed);
+      if (parsed) {
+        errorDetail = typeof parsed.detail === 'object' 
+          ? JSON.stringify(parsed.detail) 
+          : (parsed.detail || JSON.stringify(parsed));
+      }
     } catch (_) { }
     const error = new Error(`API Error [${response.status}]: ${errorDetail}`);
     error.status = response.status;

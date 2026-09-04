@@ -52,19 +52,19 @@ async def advance(conn, incident_id, new_status: str):
     return row
 
 
-async def record_event(conn, incident_id, status: str) -> None:
-    """Append one row to the incident's status-history timeline.
+import logging
 
-    Called automatically by `advance()` above on every successful forward
-    transition. Also called once directly by POST /sos right after a NEW
-    incident row is inserted, to record its initial 'sos_triggered' state --
-    `advance()` never transitions INTO that status since it's the row's own
-    default, so it would otherwise be missing from the timeline.
-    """
-    await conn.execute(
-        "insert into incident_events (incident_id, status) values ($1, $2)",
-        incident_id, status,
-    )
+log = logging.getLogger("crisisconnect.incidents")
+
+async def record_event(conn, incident_id, status: str) -> None:
+    """Append one row to the incident's status-history timeline."""
+    try:
+        await conn.execute(
+            "insert into incident_events (incident_id, status) values ($1, $2)",
+            incident_id, status,
+        )
+    except Exception as exc:
+        log.warning("incident_events record_event skipped/failed: %s", exc)
 
 
 async def maybe_auto_resolve(conn, incident_id):

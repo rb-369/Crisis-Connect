@@ -143,6 +143,8 @@ async def create_request(body: RequestCreate):
                 proof_video_url=body.proof_video_url,
             )
 
+            severity = "critical" if (body.category in config.CRITICAL_CATEGORIES or body.is_critical) else "non_critical"
+
             row = await conn.fetchrow(
                 """
                 insert into requests (category, urgency, lat, lng, requester_device_id,
@@ -151,13 +153,13 @@ async def create_request(body: RequestCreate):
                                       admin_status, severity_class, service_details,
                                       verification_status, verification_reasons,
                                       voice_note_url, proof_video_url)
-                values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'non_critical',$13,$14,$15,$16,$17)
+                values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
                 returning *
                 """,
                 body.category, urgency, body.lat, body.lng, body.requester_device_id,
                 body.requester_name, body.requester_phone, body.details,
                 body.photo_url, bool(in_zone), linked_to, admin_status,
-                body.service_details, verification_status, verification_reasons,
+                severity, body.service_details, verification_status, verification_reasons,
                 body.voice_note_url, body.proof_video_url,
             )
 

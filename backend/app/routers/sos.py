@@ -65,35 +65,37 @@ async def create_sos(body: SosCreate):
                 )
             admin_status = "flagged" if far_from_zones else "pending"
 
-            existing_incident_id = await conn.fetchval(
-                FIND_INCIDENT_SQL, body.category, config.INCIDENT_WINDOW_MIN,
-                body.lat, body.lng, float(config.INCIDENT_RADIUS_M),
-            )
-            if existing_incident_id is not None:
-                incident = await conn.fetchrow(
-                    """
-                    update incidents
-                       set priority = priority + 1, request_count = request_count + 1,
-                           updated_at = now()
-                     where id = $1
-                    returning *
-                    """,
-                    existing_incident_id,
+            incident = None
+            try:
+                existing_incident_id = await conn.fetchval(
+                    FIND_INCIDENT_SQL, body.category, config.INCIDENT_WINDOW_MIN,
+                    body.lat, body.lng, float(config.INCIDENT_RADIUS_M),
                 )
-            else:
-                incident = await conn.fetchrow(
-                    """
-                    insert into incidents (category, center_lat, center_lng)
-                    values ($1, $2, $3)
-                    returning *
-                    """,
-                    body.category, body.lat, body.lng,
-                )
-                # advance() records every OTHER status transition on the
-                # incident timeline automatically; this is the one status
-                # (the row's own default) it never transitions INTO, so the
-                # initial state needs its own explicit record.
-                await incident_status.record_event(conn, incident["id"], "sos_triggered")
+                if existing_incident_id is not None:
+                    incident = await conn.fetchrow(
+                        """
+                        update incidents
+                           set priority = priority + 1, request_count = request_count + 1,
+                               updated_at = now()
+                         where id = $1
+                        returning *
+                        """,
+                        existing_incident_id,
+                    )
+                else:
+                    incident = await conn.fetchrow(
+                        """
+                        insert into incidents (category, center_lat, center_lng)
+                        values ($1, $2, $3)
+                        returning *
+                        """,
+                        body.category, body.lat, body.lng,
+                    )
+                    await incident_status.record_event(conn, incident["id"], "sos_triggered")
+            except Exception as inc_err:
+                log.warning("Incident clustering fallback: %s", inc_err)
+
+            incident_id = incident["id"] if incident is not None else None
 
             row = await conn.fetchrow(
                 """
@@ -106,29 +108,35 @@ async def create_sos(body: SosCreate):
                 """,
                 body.category, body.lat, body.lng, body.requester_device_id,
                 body.details, body.photo_url, admin_status, bool(in_zone),
-                incident["id"], body.client_created_at,
+                incident_id, body.client_created_at,
             )
 
-            advanced = await incident_status.advance(conn, incident["id"], "alert_sent")
+            advanced = None
+            if incident is not None:
+                try:
+                    advanced = await incident_status.advance(conn, incident["id"], "alert_sent")
+                except Exception as adv_err:
+                    log.warning("Incident advance warning: %s", adv_err)
             incident_out = advanced if advanced is not None else incident
 
     created = serialize.row(row)
     created["linked_count"] = 0
-    incident_payload = serialize.row(incident_out)
+    incident_payload = serialize.row(incident_out) if incident_out is not None else {}
 
-    # Responder-count broadcast: how many available volunteers the alert
-    # actually reaches, so clients can show "N responders alerted" instead
-    # of firing the alert into the void with no feedback. Uses the same
-    # escalating radius search as GET /incidents/{id}/responders.
-    radius_used, responder_rows = await escalate_search(
-        incident_out["center_lat"], incident_out["center_lng"])
-    incident_payload["responders_notified"] = len(responder_rows)
-    incident_payload["responders_search_radius_m"] = radius_used
+    if incident_out is not None:
+        try:
+            radius_used, responder_rows = await escalate_search(
+                incident_out["center_lat"], incident_out["center_lng"])
+            incident_payload["responders_notified"] = len(responder_rows)
+            incident_payload["responders_search_radius_m"] = radius_used
+        except Exception as esc_err:
+            log.warning("Escalate responder search warning: %s", esc_err)
 
     await manager.broadcast(events.GLOBAL, events.NEW_REQUEST, created)
-    await manager.broadcast(
-        events.incident_channel(incident_out["id"]), events.INCIDENT_UPDATE, incident_payload)
-    await manager.broadcast(events.GLOBAL, events.INCIDENT_UPDATE, incident_payload)
+    if incident_out is not None:
+        await manager.broadcast(
+            events.incident_channel(incident_out["id"]), events.INCIDENT_UPDATE, incident_payload)
+        await manager.broadcast(events.GLOBAL, events.INCIDENT_UPDATE, incident_payload)
 
     log.info(
         "SOS: %s request %s -> incident %s (priority %d, %d linked request(s))%s",

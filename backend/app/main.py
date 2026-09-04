@@ -5,8 +5,9 @@ import json
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from . import config, db, events, expiry
 from .demo_seed import DEMO_HELPER, DEMO_HELPERS, DEMO_REQUESTS, DEMO_ZONE
@@ -32,7 +33,61 @@ async def lifespan(app: FastAPI):
     await db.connect()
     log.info("DB pool ready")
 
-    # Bootstrap default registered volunteers & NGOs with their blood groups & roles
+    # 1. Auto-migration check: ensure required extensions, tables, and columns exist
+    try:
+        async with db.pool().acquire() as conn:
+            await conn.execute("""
+                create extension if not exists cube;
+                create extension if not exists earthdistance;
+
+                create table if not exists incidents (
+                  id uuid primary key default gen_random_uuid(),
+                  category text not null,
+                  center_lat double precision not null,
+                  center_lng double precision not null,
+                  status text not null default 'sos_triggered',
+                  priority integer not null default 1,
+                  request_count integer not null default 1,
+                  assessment jsonb,
+                  coordinating_orgs text[] not null default '{}',
+                  created_at timestamptz default now(),
+                  updated_at timestamptz default now()
+                );
+
+                create index if not exists incidents_status_idx on incidents (status, created_at desc);
+
+                create table if not exists incident_events (
+                  id uuid primary key default gen_random_uuid(),
+                  incident_id uuid references incidents(id) on delete cascade not null,
+                  status text not null,
+                  created_at timestamptz default now()
+                );
+
+                create index if not exists incident_events_incident_idx on incident_events (incident_id, created_at);
+
+                alter table requests add column if not exists incident_id uuid references incidents(id);
+                alter table requests add column if not exists severity_class text;
+                alter table requests add column if not exists verification_status text;
+                alter table requests add column if not exists verification_reasons text[] not null default '{}';
+                alter table requests add column if not exists offline_created_at timestamptz;
+                alter table requests add column if not exists service_details jsonb;
+                alter table requests add column if not exists voice_note_url text;
+                alter table requests add column if not exists proof_video_url text;
+
+                alter table helpers add column if not exists blood_type text;
+                alter table helpers add column if not exists email text;
+                alter table helpers add column if not exists darpan_id text;
+                alter table helpers add column if not exists skills text[] not null default '{}';
+                alter table helpers add column if not exists domains text[] not null default '{}';
+                alter table helpers add column if not exists badge text;
+                alter table helpers add column if not exists vehicle_type text;
+                alter table helpers add column if not exists id_file_name text;
+            """)
+            log.info("Schema auto-migration check completed")
+    except Exception as exc:
+        log.warning("Schema auto-migration check: %s", exc)
+
+    # 2. Bootstrap default registered volunteers & NGOs with their blood groups & roles
     try:
         async with db.pool().acquire() as conn:
             for h in DEMO_HELPERS:
@@ -77,6 +132,21 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    """Catch-all to guarantee CORS headers are returned even on 500 crashes."""
+    log.error("Unhandled error on %s %s: %s", request.method, request.url, exc, exc_info=True)
+    return JSONResponse(
+        status_code=500,
+        content={"detail": str(exc)},
+        headers={
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "*",
+            "Access-Control-Allow-Headers": "*",
+        },
+    )
 
 
 app.include_router(requests_router.router)

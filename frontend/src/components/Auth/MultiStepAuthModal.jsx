@@ -25,7 +25,7 @@ import {
   RefreshCw
 } from 'lucide-react';
 import { api } from '../../services/api';
-import webLogo from '../../web-logo-2.jpeg';
+import webLogo from '../../web-logo-new.jpg';
 
 const VOLUNTEER_SKILLS = [
   { id: 'first_aid', label: 'First Aid / CPR Certified', icon: HeartHandshake },

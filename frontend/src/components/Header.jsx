@@ -1,5 +1,5 @@
 import React from 'react';
-import webLogo from '../web-logo-2.jpeg';
+import webLogo from '../web-logo-new.jpg';
 import { 
   AlertTriangle, 
   ShieldAlert, 

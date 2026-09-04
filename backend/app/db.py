@@ -71,11 +71,20 @@ async def connect() -> asyncpg.Pool:
         return _pool
     except (ConnectionRefusedError, OSError, asyncpg.PostgresError) as exc:
         parsed_cfg = urlparse(config.DATABASE_URL)
-        if parsed_cfg.hostname in {"localhost", "127.0.0.1"}:
+        host = parsed_cfg.hostname or ""
+        if host in {"localhost", "127.0.0.1"}:
             raise RuntimeError(
-                f"Failed to connect to database at {parsed_cfg.hostname}:{parsed_cfg.port or 5432}. "
+                f"Failed to connect to database at {host}:{parsed_cfg.port or 5432}. "
                 "If running on Render or in production, set the DATABASE_URL environment variable "
                 "to your Supabase/PostgreSQL connection string."
+            ) from exc
+        if host.startswith("db.") and "supabase.co" in host:
+            raise RuntimeError(
+                f"Network unreachable when connecting to '{host}'. "
+                "Render does not support IPv6, and Supabase direct database URLs (db.*.supabase.co) are IPv6-only. "
+                "Please switch DATABASE_URL to the Supabase Connection Pooler URI (port 6543, "
+                "e.g., postgresql://postgres.[ref]:[password]@aws-0-[region].pooler.supabase.com:6543/postgres) "
+                "which supports IPv4."
             ) from exc
         raise
 

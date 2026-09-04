@@ -6,6 +6,7 @@ see `accept_request` for why it is shaped the way it is.
 from __future__ import annotations
 
 import logging
+import re
 import uuid
 
 from fastapi import APIRouter, HTTPException, Query
@@ -347,7 +348,7 @@ returning *
 
 
 @router.post("/requests/{request_id}/accept")
-async def accept_request(request_id: str, body: AcceptBody):
+async def accept_request(request_id: str, body: AcceptBody | None = None):
     """Claim a request for a helper.
 
     Correctness rests on three things, in order:
@@ -365,6 +366,9 @@ async def accept_request(request_id: str, body: AcceptBody):
     The broadcast happens only after the transaction commits -- we never
     announce a match that got rolled back.
     """
+    if body is None:
+        body = AcceptBody()
+
     rid = parse_uuid(request_id, "request_id")
 
     async with db.pool().acquire() as conn:
@@ -411,18 +415,26 @@ async def accept_request(request_id: str, body: AcceptBody):
 
             # Resolve or upsert helper
             hid = None
+            helper = None
             if body.helper_id:
                 try:
                     hid = uuid.UUID(str(body.helper_id))
                     helper = await conn.fetchrow("select * from helpers where id = $1", hid)
                 except (ValueError, AttributeError):
                     helper = None
-            else:
-                helper = None
 
             if helper is None:
-                phone = body.helper_phone or "+91 98201 55019"
-                helper = await conn.fetchrow("select * from helpers where phone = $1", phone)
+                phone = (body.helper_phone or "+91 98201 55019").strip()
+                clean_phone = re.sub(r"[\s\-\(\)]", "", phone)
+                helper = await conn.fetchrow(
+                    """
+                    select * from helpers 
+                     where phone = $1 
+                        or replace(replace(replace(replace(coalesce(phone, ''), ' ', ''), '-', ''), '(', ''), ')', '') = $2
+                    limit 1
+                    """,
+                    phone, clean_phone
+                )
                 if helper is None:
                     name = body.helper_name or "Volunteer Unit Alpha (Red Cross Mumbai)"
                     role = body.helper_role or "volunteer"
@@ -430,6 +442,11 @@ async def accept_request(request_id: str, body: AcceptBody):
                         """
                         insert into helpers (name, phone, role, verified, available, lat, lng, blood_type)
                         values ($1, $2, $3, true, true, $4, $5, $6)
+                        on conflict (phone) do update set
+                            name = coalesce(excluded.name, helpers.name),
+                            lat = coalesce(excluded.lat, helpers.lat),
+                            lng = coalesce(excluded.lng, helpers.lng),
+                            blood_type = coalesce(excluded.blood_type, helpers.blood_type)
                         returning *
                         """,
                         name, phone, role, body.helper_lat, body.helper_lng, body.blood_group,
@@ -443,7 +460,7 @@ async def accept_request(request_id: str, body: AcceptBody):
                         """
                         update helpers
                            set lat = coalesce($2, lat), lng = coalesce($3, lng),
-                               blood_type = coalesce($4, blood_type)
+                                blood_type = coalesce($4, blood_type)
                          where id = $1
                         returning *
                         """,

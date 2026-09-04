@@ -130,22 +130,28 @@ export default function VolunteerMock({ currentUser, onOpenAuthModal }) {
   // Synchronize with logged-in user profile if present
   useEffect(() => {
     if (currentUser) {
+      const bg = currentUser.bloodGroup || currentUser.blood_type;
       const match = DONOR_PROFILES.find(
-        (p) => p.bloodGroup === currentUser.bloodGroup || (currentUser.name && p.name.includes(currentUser.name))
+        (p) => (bg && p.bloodGroup === bg) || (currentUser.name && p.name.toLowerCase().includes(currentUser.name.toLowerCase()))
       );
       if (match) {
-        setSelectedDonorProfile(match);
-      } else if (currentUser.bloodGroup || currentUser.name) {
+        setSelectedDonorProfile({
+          ...match,
+          id: currentUser.id || match.id,
+          phone: currentUser.phone || match.phone,
+          bloodGroup: bg || match.bloodGroup,
+        });
+      } else if (bg || currentUser.name) {
         setSelectedDonorProfile({
           id: currentUser.id || 'custom-vol-user',
           name: currentUser.name || 'Active Volunteer',
           role: currentUser.role || 'volunteer',
-          bloodGroup: currentUser.bloodGroup || null,
+          bloodGroup: bg || null,
           phone: currentUser.phone || '+91 98201 00000',
           orgName: currentUser.org_name || 'Emergency Response Fleet',
-          lat: 19.0178,
-          lng: 72.8478,
-          label: currentUser.bloodGroup ? `🩸 Blood Donor (${currentUser.bloodGroup})` : '🚑 Volunteer Responder',
+          lat: currentUser.lat || 19.0178,
+          lng: currentUser.lng || 72.8478,
+          label: bg ? `🩸 Blood Donor (${bg})` : '🚑 Volunteer Responder',
         });
       }
     }
@@ -176,8 +182,8 @@ export default function VolunteerMock({ currentUser, onOpenAuthModal }) {
           const isBlood = newReq.category === 'blood';
           const reqBlood = newReq.service_details?.blood_group;
           const currentProfile = selectedDonorProfileRef.current;
-          const donorBlood = currentProfile?.bloodGroup;
-          const isCompatible = isBlood && donorBlood ? isDonorCompatible(donorBlood, reqBlood) : true;
+          const donorBlood = currentProfile?.bloodGroup || currentProfile?.blood_type;
+          const isCompatible = isBlood && donorBlood && reqBlood ? isDonorCompatible(donorBlood, reqBlood) : true;
 
           // If blood emergency: ONLY compatible donors receive alert sound and banner
           if (isBlood && donorBlood) {
@@ -353,9 +359,10 @@ export default function VolunteerMock({ currentUser, onOpenAuthModal }) {
       if (filterActiveOnly && (r.status === 'expired' || r.status === 'resolved')) {
         return false;
       }
-      if (filterCompatibleOnly && r.category === 'blood' && selectedDonorProfile.bloodGroup) {
+      const donorBlood = selectedDonorProfile.bloodGroup || selectedDonorProfile.blood_type;
+      if (filterCompatibleOnly && r.category === 'blood' && donorBlood) {
         const reqBlood = r.service_details?.blood_group;
-        return isDonorCompatible(selectedDonorProfile.bloodGroup, reqBlood);
+        return isDonorCompatible(donorBlood, reqBlood);
       }
       return true;
     })
@@ -572,7 +579,7 @@ export default function VolunteerMock({ currentUser, onOpenAuthModal }) {
         helper_name: selectedDonorProfile.name,
         helper_phone: selectedDonorProfile.phone,
         helper_role: selectedDonorProfile.role,
-        blood_group: selectedDonorProfile.bloodGroup,
+        blood_group: selectedDonorProfile.bloodGroup || selectedDonorProfile.blood_type,
         helper_lat: selectedDonorProfile.lat,
         helper_lng: selectedDonorProfile.lng,
       };

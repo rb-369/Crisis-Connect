@@ -7,6 +7,7 @@ driven end-to-end without a phone.
 """
 from __future__ import annotations
 
+import re
 from typing import Optional
 from fastapi import APIRouter, Header, HTTPException, Query
 
@@ -91,9 +92,18 @@ async def verify_otp(body: VerifyOtpRequest):
 async def login(body: LoginRequest):
     """Quick login for existing volunteers and NGOs by identifier (no OTP in demo)."""
     identifier = body.identifier.strip()
+    clean_id = re.sub(r"[\s\-\(\)]", "", identifier)
     row = await db.fetchrow(
-        "select * from helpers where phone = $1 or email = $1 or darpan_id = $1", 
-        identifier
+        """
+        select * from helpers 
+         where phone = $1 
+            or email = $1 
+            or darpan_id = $1
+            or replace(replace(replace(replace(coalesce(phone, ''), ' ', ''), '-', ''), '(', ''), ')', '') = $2
+            or name ilike '%' || $1 || '%'
+        limit 1
+        """, 
+        identifier, clean_id
     )
     if row is None:
         raise HTTPException(
@@ -112,6 +122,10 @@ async def login(body: LoginRequest):
 @router.post("/helpers", status_code=201)
 async def create_helper(body: RegisterHelperRequest):
     """Register a new Volunteer or NGO"""
+    role = "ngo_admin" if body.role in ("ngo", "ngo_admin") else "volunteer"
+    blood_type = body.blood_type or body.bloodGroup
+    darpan_id = body.darpan_id or body.darpanId
+    phone = (body.phone or "").strip()
     row = await db.fetchrow(
         """
         insert into helpers (
@@ -120,12 +134,24 @@ async def create_helper(body: RegisterHelperRequest):
             id_file_name, verified, available
         )
         values (
-            $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, true, false
+            $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, true, true
         )
+        on conflict (phone) do update set
+            name = excluded.name,
+            email = coalesce(excluded.email, helpers.email),
+            role = excluded.role,
+            org_name = coalesce(excluded.org_name, helpers.org_name),
+            darpan_id = coalesce(excluded.darpan_id, helpers.darpan_id),
+            blood_type = coalesce(excluded.blood_type, helpers.blood_type),
+            skills = excluded.skills,
+            domains = excluded.domains,
+            badge = coalesce(excluded.badge, helpers.badge),
+            vehicle_type = coalesce(excluded.vehicle_type, helpers.vehicle_type),
+            id_file_name = coalesce(excluded.id_file_name, helpers.id_file_name)
         returning *
         """,
-        body.name, body.phone, body.email, body.role, body.org_name, body.darpan_id,
-        body.blood_type, body.skills, body.domains, body.badge, body.vehicle_type,
+        body.name, phone, body.email, role, body.org_name, darpan_id,
+        blood_type, body.skills, body.domains, body.badge, body.vehicle_type,
         body.id_file_name
     )
     helper = serialize.row(row)
@@ -141,9 +167,12 @@ async def create_helper(body: RegisterHelperRequest):
 async def get_helpers(role: Optional[str] = Query(None)):
     """List all registered volunteers or NGOs in DB"""
     if role:
-        rows = await db.fetch("select * from helpers where role = $1", role)
+        if role in ("ngo", "ngo_admin"):
+            rows = await db.fetch("select * from helpers where role in ('ngo', 'ngo_admin') order by name asc")
+        else:
+            rows = await db.fetch("select * from helpers where role = $1 order by name asc", role)
     else:
-        rows = await db.fetch("select * from helpers")
+        rows = await db.fetch("select * from helpers order by name asc")
     return serialize.rows(rows)
 
 

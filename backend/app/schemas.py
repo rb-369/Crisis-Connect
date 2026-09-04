@@ -122,8 +122,19 @@ class AcceptBody(BaseModel):
     helper_phone: Optional[str] = None
     helper_role: Optional[str] = None
     blood_group: Optional[str] = None
+    blood_type: Optional[str] = None
     helper_lat: Optional[float] = None
     helper_lng: Optional[float] = None
+
+    @classmethod
+    def model_validate(cls, obj: Any, *args, **kwargs):
+        if isinstance(obj, dict):
+            obj = dict(obj)
+            if "blood_type" in obj and not obj.get("blood_group"):
+                obj["blood_group"] = obj["blood_type"]
+            if "bloodGroup" in obj and not obj.get("blood_group"):
+                obj["blood_group"] = obj["bloodGroup"]
+        return super().model_validate(obj, *args, **kwargs)
 
 
 class MatchStatusPatch(BaseModel):
@@ -198,15 +209,29 @@ class RegisterHelperRequest(BaseModel):
     name: str
     phone: Optional[str] = None
     email: Optional[str] = None
-    role: Literal["volunteer", "ngo_admin"] = "volunteer"
+    role: Literal["volunteer", "ngo_admin", "ngo"] = "volunteer"
     org_name: Optional[str] = None
     darpan_id: Optional[str] = None
+    darpanId: Optional[str] = None
     blood_type: Optional[str] = None
+    bloodGroup: Optional[str] = None
     skills: Optional[list[str]] = []
     domains: Optional[list[str]] = []
     badge: Optional[str] = None
     vehicle_type: Optional[str] = None
     id_file_name: Optional[str] = None
+
+    @classmethod
+    def model_validate(cls, obj: Any, *args, **kwargs):
+        if isinstance(obj, dict):
+            obj = dict(obj)
+            if obj.get("role") == "ngo":
+                obj["role"] = "ngo_admin"
+            if "bloodGroup" in obj and not obj.get("blood_type"):
+                obj["blood_type"] = obj["bloodGroup"]
+            if "darpanId" in obj and not obj.get("darpan_id"):
+                obj["darpan_id"] = obj["darpanId"]
+        return super().model_validate(obj, *args, **kwargs)
 
 
 class ZoneReportCreate(BaseModel):

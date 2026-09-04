@@ -139,6 +139,71 @@ const PRESET_ACCOUNTS = [
   },
 ];
 
+// Helper normalization to guarantee bloodGroup, role, and badge consistency
+const normalizeHelper = (h) => {
+  const rawRole = (h.role || '').toLowerCase();
+  const role = (rawRole === 'ngo_admin' || rawRole === 'ngo') ? 'ngo' : 'volunteer';
+  const bloodGroup = h.bloodGroup || h.blood_type || (h.badge && h.badge.match(/\((O\-|O\+|A\-|A\+|B\-|B\+|AB\-|AB\+)\)/)?.[1]) || null;
+  const darpanId = h.darpanId || h.darpan_id || null;
+  return {
+    ...h,
+    role,
+    bloodGroup,
+    blood_type: bloodGroup,
+    badge: h.badge || (bloodGroup ? `Registered Blood Donor (${bloodGroup})` : (role === 'ngo' ? (darpanId ? `NITI Darpan: ${darpanId}` : 'Authorized Humanitarian Agency') : 'Verified Volunteer')),
+    darpanId,
+    darpan_id: darpanId,
+    org_name: h.org_name || h.orgName,
+  };
+};
+
+const mergeHelpers = (dbList) => {
+  const cleanDigits = (p) => (p || '').replace(/\D/g, '');
+  const normalizedPresets = PRESET_ACCOUNTS.map(normalizeHelper);
+
+  if (!Array.isArray(dbList) || dbList.length === 0) {
+    return normalizedPresets;
+  }
+
+  const normalizedDb = dbList.map(normalizeHelper);
+
+  // Update presets with matching DB records while preserving demo names/bloodGroups
+  const updatedPresets = normalizedPresets.map((preset) => {
+    const dbMatch = normalizedDb.find((dh) => {
+      const phoneMatch = dh.phone && preset.phone && cleanDigits(dh.phone) === cleanDigits(preset.phone);
+      const emailMatch = dh.email && preset.email && dh.email.toLowerCase() === preset.email.toLowerCase();
+      const nameMatch = dh.name && preset.name && (dh.name.toLowerCase().includes(preset.name.toLowerCase()) || preset.name.toLowerCase().includes(dh.name.toLowerCase()));
+      return phoneMatch || emailMatch || nameMatch;
+    });
+
+    if (dbMatch) {
+      return {
+        ...preset,
+        ...dbMatch,
+        // Preserve preset essentials if db had nulls
+        bloodGroup: preset.bloodGroup || dbMatch.bloodGroup,
+        blood_type: preset.bloodGroup || dbMatch.bloodGroup,
+        badge: preset.badge || dbMatch.badge,
+        role: preset.role,
+        darpanId: preset.darpanId || dbMatch.darpanId,
+      };
+    }
+    return preset;
+  });
+
+  // Add any extra DB helpers that were not matched to presets (e.g. "Curl Tester Volunteer")
+  const extraDbHelpers = normalizedDb.filter((dh) => {
+    return !updatedPresets.some((p) => {
+      const phoneMatch = dh.phone && p.phone && cleanDigits(dh.phone) === cleanDigits(p.phone);
+      const emailMatch = dh.email && p.email && dh.email.toLowerCase() === p.email.toLowerCase();
+      const idMatch = dh.id && p.id && dh.id === p.id;
+      return phoneMatch || emailMatch || idMatch;
+    });
+  });
+
+  return [...updatedPresets, ...extraDbHelpers];
+};
+
 export default function MultiStepAuthModal({ isOpen, onClose, onAuthSuccess, defaultRole = 'volunteer' }) {
   const [authMode, setAuthMode] = useState('login'); // 'login' or 'signup'
   const [selectedRole, setSelectedRole] = useState(defaultRole); // 'volunteer' or 'ngo'
@@ -148,7 +213,7 @@ export default function MultiStepAuthModal({ isOpen, onClose, onAuthSuccess, def
   const [loginQuery, setLoginQuery] = useState('');
   const [loginError, setLoginError] = useState('');
   const [loginLoading, setLoginLoading] = useState(false);
-  const [dbHelpers, setDbHelpers] = useState(PRESET_ACCOUNTS);
+  const [dbHelpers, setDbHelpers] = useState(() => mergeHelpers([]));
 
   // Volunteer Sign Up State
   const [volData, setVolData] = useState({
@@ -192,13 +257,15 @@ export default function MultiStepAuthModal({ isOpen, onClose, onAuthSuccess, def
       setSelectedRole(defaultRole);
       setStep(1);
       setLoginError('');
-      // Fetch helpers from backend if available
+      // Always initialize with guaranteed preset accounts
+      setDbHelpers(mergeHelpers([]));
+      // Fetch helpers from backend if available and merge
       api.getHelpers().then((data) => {
         if (data && data.length > 0) {
-          setDbHelpers(data);
+          setDbHelpers(mergeHelpers(data));
         }
       }).catch(() => {
-        setDbHelpers(PRESET_ACCOUNTS);
+        setDbHelpers(mergeHelpers([]));
       });
     }
   }, [isOpen, defaultRole]);
@@ -233,9 +300,10 @@ export default function MultiStepAuthModal({ isOpen, onClose, onAuthSuccess, def
 
   // 1-Click Quick Login
   const handleQuickLogin = (account) => {
-    setVerifiedProfile(account);
+    const normalized = normalizeHelper(account);
+    setVerifiedProfile(normalized);
     if (onAuthSuccess) {
-      onAuthSuccess(account);
+      onAuthSuccess(normalized);
     }
     onClose();
   };
@@ -253,8 +321,9 @@ export default function MultiStepAuthModal({ isOpen, onClose, onAuthSuccess, def
     try {
       // 1. Try local DB matches first for instant response
       const clean = loginQuery.trim().toLowerCase();
+      const cleanNums = clean.replace(/\D/g, '');
       const localMatch = dbHelpers.find((h) => 
-        (h.phone && h.phone.toLowerCase().includes(clean)) ||
+        (h.phone && (h.phone.toLowerCase().includes(clean) || (cleanNums.length >= 7 && h.phone.replace(/\D/g, '').includes(cleanNums)))) ||
         (h.email && h.email.toLowerCase().includes(clean)) ||
         (h.id && h.id.toLowerCase() === clean) ||
         (h.darpanId && h.darpanId.toLowerCase().includes(clean)) ||
@@ -268,8 +337,8 @@ export default function MultiStepAuthModal({ isOpen, onClose, onAuthSuccess, def
 
       // 2. Call backend API
       const res = await api.login(loginQuery.trim());
-      if (res && res.profile) {
-        handleQuickLogin(res.profile);
+      if (res && (res.profile || res.helper)) {
+        handleQuickLogin(res.profile || res.helper);
       } else {
         setLoginError(`No registered profile found matching "${loginQuery}". Try 1-click accounts or register.`);
       }
@@ -327,25 +396,29 @@ export default function MultiStepAuthModal({ isOpen, onClose, onAuthSuccess, def
     let payload;
 
     if (selectedRole === 'volunteer') {
+      const bg = volData.bloodGroup || 'O+';
       payload = {
         role: 'volunteer',
         id: `VOL-${Math.floor(1000 + Math.random() * 9000)}`,
         name: volData.fullName || 'Rahul Verma (First Responder)',
         phone: volData.phone || '+91 98201 44102',
         email: volData.email || 'responder@crisisconnect.org',
-        bloodGroup: volData.bloodGroup || 'O+',
+        bloodGroup: bg,
+        blood_type: bg,
         skills: volData.selectedSkills,
         vehicleType: volData.vehicleType,
         verified: true,
-        badge: `Verified First Responder (${volData.bloodGroup})`,
+        badge: `Verified First Responder (${bg})`,
         idFileName: volData.idFileName || 'aadhaar_card_scan.pdf',
       };
     } else {
+      const darpan = ngoData.darpanId || 'MH/2022/048192';
       payload = {
         role: 'ngo',
         id: `NGO-${Math.floor(1000 + Math.random() * 9000)}`,
         name: ngoData.orgName || 'Disaster Response Taskforce Mumbai',
-        darpanId: ngoData.darpanId || 'MH/2022/048192',
+        darpanId: darpan,
+        darpan_id: darpan,
         email: ngoData.officialEmail || 'dispatch@disasterresponse.org',
         phone: ngoData.hotlinePhone || '+91 22 2410 8800',
         domains: ngoData.selectedDomains,

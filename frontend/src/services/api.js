@@ -112,7 +112,7 @@ export const api = {
 
   simulateAccept: (requestId, helperPayload = null) => fetchJson(`/requests/${requestId}/accept`, {
     method: 'POST',
-    body: helperPayload ? JSON.stringify(helperPayload) : undefined,
+    body: JSON.stringify(helperPayload || {}),
   }),
 
   // Matches

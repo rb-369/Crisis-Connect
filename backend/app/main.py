@@ -9,7 +9,7 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 
 from . import config, db, events, expiry
-from .demo_seed import DEMO_HELPER, DEMO_REQUESTS, DEMO_ZONE
+from .demo_seed import DEMO_HELPER, DEMO_HELPERS, DEMO_REQUESTS, DEMO_ZONE
 from .routers import auth as auth_router
 from .routers import helpers as helpers_router
 from .routers import incidents as incidents_router
@@ -31,6 +31,35 @@ log = logging.getLogger("crisisconnect")
 async def lifespan(app: FastAPI):
     await db.connect()
     log.info("DB pool ready")
+
+    # Bootstrap default registered volunteers & NGOs with their blood groups & roles
+    try:
+        async with db.pool().acquire() as conn:
+            for h in DEMO_HELPERS:
+                await conn.execute(
+                    """
+                    insert into helpers (name, phone, email, role, org_name, verified, available, lat, lng, blood_type, darpan_id, badge)
+                    values ($1, $2, $3, $4, $5, true, true, $6, $7, $8, $9, $10)
+                    on conflict (phone) do update
+                       set name = excluded.name,
+                           email = coalesce(excluded.email, helpers.email),
+                           role = excluded.role,
+                           org_name = coalesce(excluded.org_name, helpers.org_name),
+                           verified = true,
+                           available = true,
+                           lat = coalesce(excluded.lat, helpers.lat),
+                           lng = coalesce(excluded.lng, helpers.lng),
+                           blood_type = coalesce(excluded.blood_type, helpers.blood_type),
+                           darpan_id = coalesce(excluded.darpan_id, helpers.darpan_id),
+                           badge = coalesce(excluded.badge, helpers.badge)
+                    """,
+                    h["name"], h["phone"], h.get("email"), h["role"], h.get("org_name"),
+                    h.get("lat"), h.get("lng"), h.get("blood_type"),
+                    h.get("darpan_id"), h.get("badge"),
+                )
+    except Exception as exc:
+        log.warning("Initial helper bootstrap skipped or failed: %s", exc)
+
     expiry.start()
     yield
     await expiry.stop()
@@ -131,17 +160,28 @@ async def reseed_demo():
                 "truncate messages, matches, requests, zone_reports, "
                 "confirmed_zones restart identity cascade"
             )
-            await conn.execute(
-                """
-                insert into helpers (name, phone, role, org_name, verified, available, lat, lng)
-                values ($1,$2,'volunteer',$3,true,true,$4,$5)
-                on conflict (phone) do update
-                   set name = excluded.name, org_name = excluded.org_name,
-                       lat = excluded.lat, lng = excluded.lng
-                """,
-                DEMO_HELPER["name"], DEMO_HELPER["phone"], DEMO_HELPER["org_name"],
-                DEMO_HELPER["lat"], DEMO_HELPER["lng"],
-            )
+            for h in DEMO_HELPERS:
+                await conn.execute(
+                    """
+                    insert into helpers (name, phone, email, role, org_name, verified, available, lat, lng, blood_type, darpan_id, badge)
+                    values ($1, $2, $3, $4, $5, true, true, $6, $7, $8, $9, $10)
+                    on conflict (phone) do update
+                       set name = excluded.name,
+                           email = coalesce(excluded.email, helpers.email),
+                           role = excluded.role,
+                           org_name = coalesce(excluded.org_name, helpers.org_name),
+                           verified = true,
+                           available = true,
+                           lat = coalesce(excluded.lat, helpers.lat),
+                           lng = coalesce(excluded.lng, helpers.lng),
+                           blood_type = coalesce(excluded.blood_type, helpers.blood_type),
+                           darpan_id = coalesce(excluded.darpan_id, helpers.darpan_id),
+                           badge = coalesce(excluded.badge, helpers.badge)
+                    """,
+                    h["name"], h["phone"], h.get("email"), h["role"], h.get("org_name"),
+                    h.get("lat"), h.get("lng"), h.get("blood_type"),
+                    h.get("darpan_id"), h.get("badge"),
+                )
             await conn.execute(
                 """
                 insert into confirmed_zones (category, center_lat, center_lng, ml_status)

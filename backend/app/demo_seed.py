@@ -2,13 +2,87 @@
 frontend design (same coordinates/copy) so the map and admin queue render a
 consistent, checked-in demo scenario. Only used by /debug/reseed-demo.
 """
-DEMO_HELPER = {
-    "name": "Dr. Rohit Deshmukh (Red Cross Mumbai)",
-    "phone": "+919820155019",
-    "org_name": "Indian Red Cross Emergency Response Mumbai",
-    "lat": 19.0178,
-    "lng": 72.8478,
-}
+DEMO_HELPERS = [
+    {
+        "name": "Vikram Joshi",
+        "phone": "+91 98201 44021",
+        "email": "vikram.joshi@bloodheroes.org",
+        "role": "volunteer",
+        "org_name": "Mumbai Blood Heroes Network",
+        "blood_type": "O-",
+        "badge": "Universal Blood Donor (O-)",
+        "lat": 19.0178,
+        "lng": 72.8478,
+    },
+    {
+        "name": "Dr. Rohit Deshmukh (Red Cross Mumbai)",
+        "phone": "+91 98201 55019",
+        "email": "rohit.deshmukh@redcrossmumbai.org",
+        "role": "volunteer",
+        "org_name": "Indian Red Cross Emergency Response Mumbai",
+        "blood_type": "O+",
+        "badge": "Red Cross Mumbai Paramedic (O+)",
+        "lat": 19.0390,
+        "lng": 72.8619,
+    },
+    {
+        "name": "Pooja Mehta",
+        "phone": "+91 98670 12890",
+        "email": "pooja.mehta@kemdonors.in",
+        "role": "volunteer",
+        "org_name": "KEM Voluntary Donors League",
+        "blood_type": "A+",
+        "badge": "Registered Blood Donor (A+)",
+        "lat": 19.0028,
+        "lng": 72.8428,
+    },
+    {
+        "name": "Rahul Sawant",
+        "phone": "+91 98190 77654",
+        "email": "rahul.sawant@mumbaicentral.org",
+        "role": "volunteer",
+        "org_name": "Mumbai Central Youth Donors",
+        "blood_type": "B+",
+        "badge": "Registered Blood Donor (B+)",
+        "lat": 18.9712,
+        "lng": 72.8197,
+    },
+    {
+        "name": "Indian Red Cross Emergency Response Mumbai",
+        "phone": "022-2410-7000",
+        "email": "operations@redcrossmumbai.org",
+        "role": "ngo_admin",
+        "org_name": "Indian Red Cross Society",
+        "darpan_id": "MH/2021/029104",
+        "badge": "Darpan: MH/2021/029104",
+        "lat": 18.9298,
+        "lng": 72.8335,
+    },
+    {
+        "name": "Dharavi Disaster Taskforce & Relief Fleet",
+        "phone": "+91 98200 99881",
+        "email": "relief@dharavitaskforce.org",
+        "role": "ngo_admin",
+        "org_name": "Dharavi Relief Initiative",
+        "darpan_id": "MH/2020/018823",
+        "badge": "Darpan: MH/2020/018823",
+        "lat": 19.0434,
+        "lng": 72.8567,
+    },
+    {
+        "name": "Khalsa Aid Mumbai Crisis Wing",
+        "phone": "+91 98210 33445",
+        "email": "mumbai@khalsaaid.org",
+        "role": "ngo_admin",
+        "org_name": "Khalsa Aid International",
+        "darpan_id": "MH/2019/044192",
+        "badge": "Darpan: MH/2019/044192",
+        "lat": 19.0760,
+        "lng": 72.8777,
+    },
+]
+
+DEMO_HELPER = DEMO_HELPERS[1]
 
 DEMO_ZONE = {
     "category": "rescue",

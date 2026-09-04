@@ -66,8 +66,18 @@ async def connect() -> asyncpg.Pool:
     if cache == 0:
         # pgbouncer also rejects asyncpg's introspection prepared statements.
         kwargs["server_settings"] = {"jit": "off"}
-    _pool = await asyncpg.create_pool(dsn, init=_init_connection, **kwargs)
-    return _pool
+    try:
+        _pool = await asyncpg.create_pool(dsn, init=_init_connection, **kwargs)
+        return _pool
+    except (ConnectionRefusedError, OSError, asyncpg.PostgresError) as exc:
+        parsed_cfg = urlparse(config.DATABASE_URL)
+        if parsed_cfg.hostname in {"localhost", "127.0.0.1"}:
+            raise RuntimeError(
+                f"Failed to connect to database at {parsed_cfg.hostname}:{parsed_cfg.port or 5432}. "
+                "If running on Render or in production, set the DATABASE_URL environment variable "
+                "to your Supabase/PostgreSQL connection string."
+            ) from exc
+        raise
 
 
 async def disconnect() -> None:

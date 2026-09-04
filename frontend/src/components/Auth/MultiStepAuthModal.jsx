@@ -25,6 +25,7 @@ import {
   RefreshCw
 } from 'lucide-react';
 import { api } from '../../services/api';
+import webLogo from '../../web-logo.jpeg';
 
 const VOLUNTEER_SKILLS = [
   { id: 'first_aid', label: 'First Aid / CPR Certified', icon: HeartHandshake },
@@ -464,8 +465,12 @@ export default function MultiStepAuthModal({ isOpen, onClose, onAuthSuccess, def
           </button>
 
           <div className="flex items-center space-x-3">
-            <div className={`w-11 h-11 rounded-2xl ${authMode === 'login' ? 'bg-blue-600' : 'bg-red-600'} flex items-center justify-center text-white shadow-md`}>
-              {authMode === 'login' ? <LogIn className="w-6 h-6" /> : <ShieldCheck className="w-6 h-6" />}
+            <div className="w-12 h-12 rounded-2xl bg-white p-1 flex items-center justify-center shadow-md border border-white/20 flex-shrink-0 overflow-hidden">
+              <img 
+                src={webLogo} 
+                alt="CrisisConnect" 
+                className="w-full h-full object-contain"
+              />
             </div>
             <div>
               <div className="flex items-center space-x-2">

@@ -1,4 +1,5 @@
 import React from 'react';
+import webLogo from '../web-logo.jpeg';
 import { 
   AlertTriangle, 
   ShieldAlert, 
@@ -119,8 +120,12 @@ export default function Header({
             className="flex items-center space-x-3 cursor-pointer group"
             onClick={() => onTabChange('requester')}
           >
-            <div className="w-9 h-9 rounded-xl bg-red-600 flex items-center justify-center shadow-md shadow-red-600/30 group-hover:scale-105 transition">
-              <Activity className="w-5 h-5 text-white animate-pulse" />
+            <div className="w-10 h-10 rounded-xl bg-white p-1 flex items-center justify-center shadow-md shadow-red-600/20 group-hover:scale-105 transition border border-slate-700/80 flex-shrink-0 overflow-hidden">
+              <img 
+                src={webLogo} 
+                alt="CrisisConnect" 
+                className="w-full h-full object-contain"
+              />
             </div>
             <div>
               <div className="flex items-center space-x-2">

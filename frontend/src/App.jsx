@@ -12,6 +12,7 @@ import MultiStepAuthModal from './components/Auth/MultiStepAuthModal';
 import ErrorBoundary from './components/Common/ErrorBoundary';
 import { CrisisWebSocketClient } from './services/websocket';
 import { api } from './services/api';
+import webLogo from './web-logo.jpeg';
 
 export default function App() {
   const [currentTab, setCurrentTab] = useState('requester');
@@ -218,8 +219,21 @@ export default function App() {
       />
 
       {/* Footer */}
-      <footer className="border-t border-[#CBD5E1] bg-white py-4 px-6 text-center text-xs text-[#64748B] font-medium">
-        CrisisConnect &bull; Emergency Coordination Platform &bull; FastAPI Native WebSockets &bull; Supabase PostgreSQL &bull; React Vite Tailwind
+      <footer className="border-t border-[#CBD5E1] bg-white py-4 px-6 text-xs text-[#64748B] font-medium">
+        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
+          <div className="flex items-center space-x-2.5">
+            <div className="w-7 h-7 rounded-lg bg-white p-0.5 border border-slate-300 shadow-xs flex items-center justify-center overflow-hidden flex-shrink-0">
+              <img src={webLogo} alt="CrisisConnect" className="w-full h-full object-contain" />
+            </div>
+            <span className="font-extrabold text-slate-800 tracking-tight text-sm">
+              Crisis<span className="text-red-600">Connect</span>
+            </span>
+            <span className="text-slate-400 text-xs hidden sm:inline">&bull; 1-Tap Humanitarian Emergency Coordination</span>
+          </div>
+          <div className="text-center sm:text-right text-[11px] text-slate-500">
+            FastAPI Native WebSockets &bull; Supabase PostgreSQL &bull; MapLibre GL
+          </div>
+        </div>
       </footer>
     </div>
   );

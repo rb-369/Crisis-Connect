@@ -252,9 +252,14 @@ export default function InstantReport({ onRequestCreated }) {
               Tap for immediate rescue. Broadcasts your live GPS coordinates directly to all nearby emergency response teams and NGOs.
             </p>
 
-            <div className="mt-4 inline-flex items-center space-x-2 bg-black/25 backdrop-blur-md px-4 py-2 rounded-xl border border-white/20 text-xs font-black uppercase tracking-wider text-white group-hover:bg-white group-hover:text-[#DC2626] transition">
-              <Radio className="w-4 h-4 animate-pulse" />
-              <span>Broadcast Master Distress Beacon Now &rarr;</span>
+            <div className="mt-4 flex flex-wrap items-center gap-3">
+              <div className="inline-flex items-center space-x-2 bg-black/25 backdrop-blur-md px-4 py-2 rounded-xl border border-white/20 text-xs font-black uppercase tracking-wider text-white group-hover:bg-white group-hover:text-[#DC2626] transition shadow-xs">
+                <Radio className="w-4 h-4 animate-pulse" />
+                <span>Broadcast Master Distress Beacon Now &rarr;</span>
+              </div>
+              <span className="text-[11px] text-red-200/90 font-medium">
+                Instant dispatch &bull; Accidental? Cancel easily on next screen
+              </span>
             </div>
           </div>
         </button>

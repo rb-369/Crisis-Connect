@@ -11,7 +11,8 @@ import {
   CheckCircle2,
   Users,
   Sparkles,
-  ShieldCheck
+  ShieldCheck,
+  XCircle,
 } from 'lucide-react';
 import { api } from '../../services/api';
 import { CrisisWebSocketClient } from '../../services/websocket';
@@ -26,14 +27,19 @@ export default function AdminDashboard({ onOpenMap, currentUser, onOpenAuthModal
   const fetchRequests = async () => {
     setLoading(true);
     try {
-      const isSpecialFilter = statusFilter === 'clusters' || statusFilter === 'expired';
+      const isSpecialFilter = statusFilter === 'clusters' || statusFilter === 'expired' || statusFilter === 'cancelled';
       const adminParam = isSpecialFilter ? null : (statusFilter || null);
       const data = await api.getRequests(adminParam, false, 'priority');
       let filtered = data || [];
       if (statusFilter === 'clusters') {
-        filtered = filtered.filter((r) => (r.linked_count || 0) > 0);
+        filtered = filtered.filter((r) => (r.linked_count || 0) > 0 && r.status !== 'cancelled');
       } else if (statusFilter === 'expired') {
-        filtered = filtered.filter((r) => r.status === 'expired' || r.is_stale);
+        filtered = filtered.filter((r) => (r.status === 'expired' || r.is_stale) && r.status !== 'cancelled');
+      } else if (statusFilter === 'cancelled') {
+        filtered = filtered.filter((r) => r.status === 'cancelled' || r.admin_status === 'cancelled');
+      } else {
+        // Exclude cancelled emergencies from active queue views
+        filtered = filtered.filter((r) => r.status !== 'cancelled' && r.admin_status !== 'cancelled');
       }
       setRequests(filtered);
     } catch (err) {
@@ -50,16 +56,25 @@ export default function AdminDashboard({ onOpenMap, currentUser, onOpenAuthModal
       'admin',
       'all',
       (payload) => {
-        if (payload.event === 'new_request' && payload.data) {
+        if (payload.event === 'request_cancelled' || payload.data?.status === 'cancelled') {
+          const cancelId = payload.data?.id || payload.data?.request_id;
+          setRequests((prev) => prev.filter((r) => r.id !== cancelId));
+        } else if (payload.event === 'new_request' && payload.data) {
+          if (payload.data.status === 'cancelled') return;
           setRequests((prev) => {
             if (prev.some((r) => r.id === payload.data.id)) return prev;
             // Prepend new request immediately to the top
             return [payload.data, ...prev];
           });
         } else if (payload.event === 'status_update' || payload.event === 'matched') {
-          setRequests((prev) =>
-            prev.map((r) => (r.id === payload.data.id ? { ...r, ...payload.data } : r))
-          );
+          if (payload.data?.status === 'cancelled') {
+            const cancelId = payload.data.id || payload.data.request_id;
+            setRequests((prev) => prev.filter((r) => r.id !== cancelId));
+          } else {
+            setRequests((prev) =>
+              prev.map((r) => (r.id === payload.data.id ? { ...r, ...payload.data } : r))
+            );
+          }
         }
       }
     );
@@ -93,6 +108,20 @@ export default function AdminDashboard({ onOpenMap, currentUser, onOpenAuthModal
       );
     } catch (err) {
       console.error('Failed to expire request:', err);
+    } finally {
+      setActionInProgress(null);
+    }
+  };
+
+  const handleCancelEmergency = async (requestId) => {
+    if (!window.confirm('Cancel this emergency request as an accidental trigger or false alarm? It will be removed from the triage queue and live map.')) return;
+    setActionInProgress(requestId);
+    try {
+      await api.cancelRequest(requestId, 'Cancelled by dispatcher (accidental/false alarm)');
+      setRequests((prev) => prev.filter((r) => r.id !== requestId));
+    } catch (err) {
+      console.error('Failed to cancel request:', err);
+      alert('Cancel failed: ' + err.message);
     } finally {
       setActionInProgress(null);
     }
@@ -425,6 +454,19 @@ export default function AdminDashboard({ onOpenMap, currentUser, onOpenAuthModal
                       >
                         <Clock className="w-3.5 h-3.5 text-amber-400" />
                         <span>Expire</span>
+                      </button>
+                    )}
+
+                    {/* Accidental / False Alarm Cancel Action */}
+                    {req.status !== 'cancelled' && (
+                      <button
+                        disabled={actionInProgress === req.id}
+                        onClick={() => handleCancelEmergency(req.id)}
+                        title="Cancel accidental report or false alarm to remove from queue and map"
+                        className="px-3 py-2 rounded-xl bg-slate-100 hover:bg-red-50 text-red-600 border border-slate-300 hover:border-red-300 text-xs font-bold transition flex items-center space-x-1 disabled:opacity-30 shadow-2xs cursor-pointer"
+                      >
+                        <XCircle className="w-3.5 h-3.5 text-red-500" />
+                        <span>Cancel SOS</span>
                       </button>
                     )}
                   </div>

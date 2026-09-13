@@ -24,6 +24,9 @@ import {
   Sparkles,
   Users,
   RefreshCw,
+  XCircle,
+  AlertTriangle,
+  Loader2,
 } from 'lucide-react';
 import { CrisisWebSocketClient } from '../../services/websocket';
 import { api } from '../../services/api';
@@ -41,7 +44,7 @@ const STATUS_STEPS = [
 ];
 
 
-export default function LiveStatusTracker({ initialRequest, onNewRequest }) {
+export default function LiveStatusTracker({ initialRequest, onNewRequest, onCancelEmergency }) {
   const [request, setRequest] = useState(initialRequest);
   const [activeTab, setActiveTab] = useState('tracker'); // 'tracker' or 'chat'
   const [wsStatus, setWsStatus] = useState('connecting');
@@ -50,6 +53,9 @@ export default function LiveStatusTracker({ initialRequest, onNewRequest }) {
   const [isHeartbeating, setIsHeartbeating] = useState(false);
   const [heartbeatMessage, setHeartbeatMessage] = useState(null);
   const [matchNotification, setMatchNotification] = useState(null);
+  const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
+  const [isCancelling, setIsCancelling] = useState(false);
+  const [cancelSuccessMsg, setCancelSuccessMsg] = useState(null);
   const audioPlayerRef = useRef(null);
 
   useEffect(() => {
@@ -153,6 +159,22 @@ export default function LiveStatusTracker({ initialRequest, onNewRequest }) {
     }
   };
 
+  const handleHeartbeat = async () => {
+    setIsHeartbeating(true);
+    try {
+      await api.sendHeartbeat(request.id);
+      setHeartbeatMessage('Emergency beacon refreshed. Active status confirmed with responders.');
+      setTimeout(() => setHeartbeatMessage(null), 4000);
+      if (request.status === 'expired') {
+        setRequest((prev) => ({ ...prev, status: 'requested' }));
+      }
+    } catch (err) {
+      console.warn('Heartbeat update failed:', err);
+    } finally {
+      setIsHeartbeating(false);
+    }
+  };
+
   const handleConfirmResolution = async () => {
     if (window.confirm('Confirm that you have received the required emergency assistance?')) {
       setIsResolving(true);
@@ -169,21 +191,21 @@ export default function LiveStatusTracker({ initialRequest, onNewRequest }) {
     }
   };
 
-  const handleHeartbeat = async () => {
-    if (!request?.id) return;
-    setIsHeartbeating(true);
+  const handleConfirmCancel = async (reason = 'Accidental emergency request by user') => {
+    setIsCancelling(true);
     try {
-      const res = await api.sendHeartbeat(request.id);
-      if (res && res.request) {
-        setRequest((prev) => ({ ...prev, ...res.request }));
+      if (onCancelEmergency) {
+        await onCancelEmergency(request.id, reason);
+      } else if (request?.id) {
+        await api.cancelRequest(request.id, reason);
       }
-      setHeartbeatMessage('✓ Emergency status confirmed active! Dispatch timer refreshed.');
-      setTimeout(() => setHeartbeatMessage(null), 4000);
+      setCancelSuccessMsg('Emergency request cancelled and withdrawn from all responder queues.');
+      setTimeout(() => {
+        onNewRequest();
+      }, 1200);
     } catch (err) {
-      console.error('Heartbeat failed:', err);
-      setHeartbeatMessage('Failed to update: ' + (err.message || 'Network error'));
-    } finally {
-      setIsHeartbeating(false);
+      alert('Could not cancel on server: ' + err.message);
+      setIsCancelling(false);
     }
   };
 
@@ -194,16 +216,27 @@ export default function LiveStatusTracker({ initialRequest, onNewRequest }) {
   return (
     <div className="max-w-3xl mx-auto py-2 sm:py-6 px-2">
       {/* Top back button & WS status */}
-      <div className="flex items-center justify-between mb-4">
-        <button
-          onClick={onNewRequest}
-          className="flex items-center space-x-1.5 text-xs font-bold text-[#475569] hover:text-[#0F172A] bg-white px-3 py-1.5 rounded-xl border border-[#CBD5E1] shadow-sm transition cursor-pointer"
-        >
-          <ArrowLeft className="w-4 h-4" />
-          <span>New Emergency Request</span>
-        </button>
+      <div className="flex flex-wrap items-center justify-between gap-2.5 mb-4">
+        <div className="flex items-center space-x-2">
+          <button
+            onClick={onNewRequest}
+            className="flex items-center space-x-1.5 text-xs font-bold text-[#475569] hover:text-[#0F172A] bg-white px-3 py-1.5 rounded-xl border border-[#CBD5E1] shadow-xs transition cursor-pointer"
+          >
+            <ArrowLeft className="w-4 h-4 text-slate-500" />
+            <span>New Emergency Request</span>
+          </button>
 
-        <div className="flex items-center space-x-1.5 px-3 py-1 rounded-full bg-white border border-[#CBD5E1] text-[11px] font-mono text-[#475569] shadow-sm">
+          <button
+            onClick={() => setIsCancelModalOpen(true)}
+            className="flex items-center space-x-1.5 text-xs font-extrabold text-red-600 hover:text-red-700 bg-white hover:bg-red-50 px-3 py-1.5 rounded-xl border border-red-200 hover:border-red-300 shadow-xs transition cursor-pointer"
+            title="Cancel this emergency request if submitted accidentally"
+          >
+            <XCircle className="w-4 h-4 text-red-500" />
+            <span>Cancel Emergency</span>
+          </button>
+        </div>
+
+        <div className="flex items-center space-x-1.5 px-3 py-1 rounded-full bg-white border border-[#CBD5E1] text-[11px] font-mono text-[#475569] shadow-xs">
           <span className={`w-2 h-2 rounded-full ${wsStatus === 'connected' ? 'bg-[#16A34A] animate-ping-slow' : 'bg-[#D97706]'}`} />
           <span>Live Link: {wsStatus}</span>
         </div>
@@ -340,7 +373,7 @@ export default function LiveStatusTracker({ initialRequest, onNewRequest }) {
             </div>
           </div>
 
-          <div className="flex items-center space-x-2 flex-shrink-0">
+          <div className="flex flex-wrap items-center gap-2 flex-shrink-0">
             <button
               onClick={handleHeartbeat}
               disabled={isHeartbeating}
@@ -355,6 +388,13 @@ export default function LiveStatusTracker({ initialRequest, onNewRequest }) {
               className="px-3 py-1.5 rounded-xl bg-slate-700 hover:bg-slate-600 text-slate-300 text-xs font-bold transition cursor-pointer"
             >
               Help Received
+            </button>
+            <button
+              onClick={() => setIsCancelModalOpen(true)}
+              className="px-3 py-1.5 rounded-xl bg-red-950/40 hover:bg-red-900/60 text-red-300 border border-red-500/40 text-xs font-bold transition cursor-pointer flex items-center space-x-1"
+            >
+              <XCircle className="w-3.5 h-3.5 text-red-400" />
+              <span>Cancel</span>
             </button>
           </div>
         </div>
@@ -561,6 +601,18 @@ export default function LiveStatusTracker({ initialRequest, onNewRequest }) {
             </div>
           </div>
         )}
+
+        {/* Accidental press action inside card */}
+        <div className="mt-4 pt-3 border-t border-slate-200/80 flex items-center justify-between text-xs">
+          <span className="text-slate-500 font-medium">Submitted by mistake?</span>
+          <button
+            onClick={() => setIsCancelModalOpen(true)}
+            className="text-red-600 hover:text-red-700 font-bold hover:underline flex items-center space-x-1 cursor-pointer"
+          >
+            <XCircle className="w-3.5 h-3.5" />
+            <span>Cancel this emergency</span>
+          </button>
+        </div>
       </div>
 
       {/* Tabs if Matched (Pipeline vs Chat) */}
@@ -727,6 +779,80 @@ export default function LiveStatusTracker({ initialRequest, onNewRequest }) {
           </div>
         </div>
       )}
+
+      {/* =========================================================================
+          ACCIDENTAL EMERGENCY CANCELLATION CONFIRMATION MODAL
+         ========================================================================= */}
+      {isCancelModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-xs animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200 animate-in zoom-in-95 duration-200">
+            <div className="w-14 h-14 rounded-2xl bg-red-50 border border-red-200 flex items-center justify-center mx-auto mb-4 text-red-600">
+              <AlertTriangle className="w-7 h-7" />
+            </div>
+
+            <h3 className="text-xl font-black text-slate-900 text-center tracking-tight">
+              Cancel Emergency Request?
+            </h3>
+
+            <p className="text-xs text-slate-600 text-center mt-2 leading-relaxed">
+              If this emergency request was created by accident or help is no longer required:
+            </p>
+
+            <ul className="mt-3.5 space-y-2 bg-slate-50 border border-slate-200 p-3.5 rounded-2xl text-xs text-slate-700 font-medium">
+              <li className="flex items-center space-x-2">
+                <span className="w-1.5 h-1.5 rounded-full bg-red-600 flex-shrink-0" />
+                <span>The request will be withdrawn from nearby volunteers immediately.</span>
+              </li>
+              <li className="flex items-center space-x-2">
+                <span className="w-1.5 h-1.5 rounded-full bg-red-600 flex-shrink-0" />
+                <span>It will be removed from the NGO Dispatch Triage Queue.</span>
+              </li>
+              <li className="flex items-center space-x-2">
+                <span className="w-1.5 h-1.5 rounded-full bg-red-600 flex-shrink-0" />
+                <span>Its pin will be cleared from the live GIS Crisis Map.</span>
+              </li>
+            </ul>
+
+            {cancelSuccessMsg ? (
+              <div className="mt-4 p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-bold text-center">
+                {cancelSuccessMsg}
+              </div>
+            ) : (
+              <div className="mt-6 flex flex-col sm:flex-row items-center gap-2.5">
+                <button
+                  type="button"
+                  disabled={isCancelling}
+                  onClick={() => handleConfirmCancel('Accidental emergency request by user')}
+                  className="w-full sm:flex-1 py-3 px-4 rounded-xl bg-red-600 hover:bg-red-700 text-white font-black text-xs transition shadow-md shadow-red-600/20 flex items-center justify-center space-x-2 cursor-pointer disabled:opacity-50"
+                >
+                  {isCancelling ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Cancelling Request...</span>
+                    </>
+                  ) : (
+                    <>
+                      <XCircle className="w-4 h-4" />
+                      <span>Yes, Cancel Request</span>
+                    </>
+                  )}
+                </button>
+
+                <button
+                  type="button"
+                  disabled={isCancelling}
+                  onClick={() => setIsCancelModalOpen(false)}
+                  className="w-full sm:w-auto py-3 px-5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition cursor-pointer"
+                >
+                  Keep Active
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
+

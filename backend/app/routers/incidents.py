@@ -87,7 +87,7 @@ async def get_incident(incident_id: str):
         raise HTTPException(404, "incident not found")
     out = serialize.row(row)
     linked = await db.fetch(
-        "select * from requests where incident_id = $1 order by created_at asc", iid)
+        "select * from requests where incident_id = $1 and status <> 'cancelled' order by created_at asc", iid)
     out["requests"] = serialize.rows(linked)
     return out
 

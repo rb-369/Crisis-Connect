@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
-import { User, Phone, FileText, Image, Video, Camera, ArrowRight, SkipForward, CheckCircle2, ShieldCheck, X } from 'lucide-react';
+import { User, Phone, FileText, Image, Video, Camera, ArrowRight, SkipForward, CheckCircle2, ShieldCheck, X, XCircle, AlertTriangle, Loader2 } from 'lucide-react';
 import { api } from '../../services/api';
 
-export default function EnrichmentForm({ request, onComplete, onSkip }) {
+export default function EnrichmentForm({ request, onComplete, onSkip, onCancelEmergency }) {
   const [formData, setFormData] = useState({
     requester_name: request.requester_name || '',
     requester_phone: request.requester_phone || '',
@@ -12,6 +12,8 @@ export default function EnrichmentForm({ request, onComplete, onSkip }) {
   const [mediaPreview, setMediaPreview] = useState(null);
   const [isVideoProof, setIsVideoProof] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
+  const [isCancelling, setIsCancelling] = useState(false);
 
   const isCritical = request.urgency === 'high';
 
@@ -60,144 +62,158 @@ export default function EnrichmentForm({ request, onComplete, onSkip }) {
     }
   };
 
+  const handleConfirmCancel = async () => {
+    setIsCancelling(true);
+    try {
+      if (onCancelEmergency) {
+        await onCancelEmergency(request.id, 'Accidental trigger during enrichment');
+      } else {
+        await api.cancelRequest(request.id, 'Accidental trigger during enrichment');
+      }
+    } catch (err) {
+      console.error('Cancellation error:', err);
+      if (onSkip) onSkip();
+    } finally {
+      setIsCancelling(false);
+      setIsCancelModalOpen(false);
+    }
+  };
+
   return (
     <div className="max-w-xl mx-auto py-4 sm:py-8 px-2">
       {/* Reassurance Confirmation Banner */}
-      <div className="p-4 rounded-2xl bg-[#DCFCE7] border border-[#BBF7D0] mb-6 flex items-center justify-between shadow-sm">
+      <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200 mb-6 flex items-center justify-between shadow-xs">
         <div className="flex items-center space-x-3.5">
-          <div className="w-10 h-10 rounded-xl bg-[#16A34A] text-white flex items-center justify-center shadow-sm">
+          <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center shadow-xs">
             <CheckCircle2 className="w-6 h-6" />
           </div>
           <div>
-            <h4 className="font-extrabold text-[#15803D] text-sm sm:text-base">
-              SOS Broadcasted Successfully!
+            <h4 className="font-extrabold text-emerald-900 text-sm sm:text-base">
+              Request Broadcasted to Nearby Responders!
             </h4>
-            <p className="text-xs text-[#166534] font-medium mt-0.5">
-              Responders can see your live location for <strong className="uppercase">{request.category}</strong> aid.
+            <p className="text-xs text-emerald-700 font-medium mt-0.5">
+              Live coordinates active for <strong className="uppercase">{request.category}</strong> relief.
             </p>
           </div>
         </div>
+
+        <button
+          type="button"
+          onClick={() => setIsCancelModalOpen(true)}
+          className="text-xs font-bold text-red-600 hover:text-red-700 bg-white hover:bg-red-50 px-3 py-1.5 rounded-xl border border-red-200 transition flex items-center space-x-1 cursor-pointer shadow-xs"
+        >
+          <XCircle className="w-3.5 h-3.5" />
+          <span>Cancel</span>
+        </button>
       </div>
 
       {/* Form Card */}
-      <div className="bg-white border border-[#E2E8F0] p-6 sm:p-7 rounded-2xl shadow-sm">
-        <div className="flex items-center justify-between border-b border-[#E2E8F0] pb-4 mb-5">
+      <div className="bg-white border border-slate-200 p-6 sm:p-7 rounded-2xl shadow-xs">
+        <div className="flex items-center justify-between border-b border-slate-200 pb-4 mb-5">
           <div>
-            <h2 className="text-lg sm:text-xl font-extrabold text-[#0F172A]">
+            <h2 className="text-lg sm:text-xl font-extrabold text-slate-900">
               Step 2: Add Contact & Verification Details
             </h2>
-            <p className="text-xs text-[#64748B] font-medium mt-0.5">
+            <p className="text-xs text-slate-500 font-medium mt-0.5">
               Help responders verify situation authenticity & locate you faster. Skippable anytime.
             </p>
           </div>
-          <button
-            onClick={onSkip}
-            className="text-xs font-bold px-3 py-1.5 rounded-xl bg-[#F1F5F9] hover:bg-[#E2E8F0] text-[#475569] border border-[#CBD5E1] transition flex items-center space-x-1"
-          >
-            <span>Skip Form</span>
-            <SkipForward className="w-3.5 h-3.5" />
-          </button>
+          <div className="flex items-center space-x-2">
+            <button
+              onClick={onSkip}
+              className="text-xs font-bold px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 transition flex items-center space-x-1 cursor-pointer"
+            >
+              <span>Skip</span>
+              <SkipForward className="w-3.5 h-3.5" />
+            </button>
+          </div>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-xs font-bold text-[#0F172A] mb-1.5">
+            <label className="block text-xs font-bold text-slate-900 mb-1.5">
               Your Name or Contact Person (Optional)
             </label>
             <div className="relative">
-              <User className="w-4 h-4 text-[#64748B] absolute left-3.5 top-3.5" />
+              <User className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5" />
               <input
                 type="text"
                 value={formData.requester_name}
                 onChange={(e) => setFormData({ ...formData, requester_name: e.target.value })}
                 placeholder="e.g., Rajesh Sharma / Floor 2 Resident"
-                className="w-full pl-10 pr-3.5 py-2.5 bg-[#F8FAFC] border border-[#CBD5E1] rounded-xl text-sm text-[#0F172A] placeholder-[#94A3B8] focus:outline-none focus:border-[#2563EB] focus:bg-white transition"
+                className="w-full pl-10 pr-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:border-blue-600 focus:bg-white transition"
               />
             </div>
           </div>
 
           <div>
-            <label className="block text-xs font-bold text-[#0F172A] mb-1.5">
+            <label className="block text-xs font-bold text-slate-900 mb-1.5">
               Phone / WhatsApp Number (Optional)
             </label>
             <div className="relative">
-              <Phone className="w-4 h-4 text-[#64748B] absolute left-3.5 top-3.5" />
+              <Phone className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5" />
               <input
                 type="tel"
                 value={formData.requester_phone}
                 onChange={(e) => setFormData({ ...formData, requester_phone: e.target.value })}
                 placeholder="e.g., +91 98201 12345"
-                className="w-full pl-10 pr-3.5 py-2.5 bg-[#F8FAFC] border border-[#CBD5E1] rounded-xl text-sm text-[#0F172A] placeholder-[#94A3B8] focus:outline-none focus:border-[#2563EB] focus:bg-white transition"
+                className="w-full pl-10 pr-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:border-blue-600 focus:bg-white transition"
               />
             </div>
           </div>
 
           <div>
-            <label className="block text-xs font-bold text-[#0F172A] mb-1.5">
+            <label className="block text-xs font-bold text-slate-900 mb-1.5">
               Specific Situation / Landmark / Critical Needs (Optional)
             </label>
             <div className="relative">
-              <FileText className="w-4 h-4 text-[#64748B] absolute left-3.5 top-3.5" />
+              <FileText className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5" />
               <textarea
                 rows={3}
                 value={formData.details}
                 onChange={(e) => setFormData({ ...formData, details: e.target.value })}
-                placeholder="e.g., Near Kurla Bail Bazar school, 4 people stranded due to 3ft floodwaters..."
-                className="w-full pl-10 pr-3.5 py-2.5 bg-[#F8FAFC] border border-[#CBD5E1] rounded-xl text-sm text-[#0F172A] placeholder-[#94A3B8] focus:outline-none focus:border-[#2563EB] focus:bg-white transition resize-none"
+                placeholder="e.g., Water level rising near ground floor; need drinking water cans & insulin storage."
+                className="w-full pl-10 pr-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:border-blue-600 focus:bg-white transition"
               />
             </div>
           </div>
 
-          {/* Edge Case Solution: Video/Photo Proof Capture to Verify Genuine vs Fake Emergencies */}
-          <div className="p-4 rounded-xl bg-[#F8FAFC] border border-[#CBD5E1] space-y-2.5">
-            <div className="flex items-center justify-between">
-              <label className="text-xs font-bold text-[#0F172A] flex items-center space-x-1.5">
-                <Camera className="w-4 h-4 text-[#2563EB]" />
-                <span>On-Scene Video / Photo Proof (Anti-Fake Verification)</span>
-              </label>
-              <span className="text-[10px] font-bold text-[#15803D] bg-[#DCFCE7] px-2 py-0.5 rounded">
-                Tamper-Proof
-              </span>
-            </div>
-
-            <p className="text-[11px] text-[#64748B] leading-relaxed">
-              Record a 5-10 sec video or snapshot from your device camera. Authenticates crisis validity for NGO triage.
-            </p>
-
-            {/* Media Upload / Camera Trigger */}
-            {!mediaPreview ? (
-              <div className="flex gap-2">
-                <label className="flex-1 py-2.5 px-3 rounded-xl border border-dashed border-[#CBD5E1] hover:border-[#2563EB] bg-white text-center cursor-pointer flex items-center justify-center space-x-2 text-xs font-bold text-[#475569] hover:text-[#2563EB] transition shadow-sm">
-                  <Video className="w-4 h-4 text-[#DC2626]" />
-                  <span>Record On-Scene Video Proof</span>
-                  <input
-                    type="file"
-                    accept="video/*"
-                    capture="environment"
-                    onChange={handleMediaCapture}
-                    className="hidden"
-                  />
-                </label>
-
-                <label className="py-2.5 px-3 rounded-xl border border-dashed border-[#CBD5E1] hover:border-[#2563EB] bg-white text-center cursor-pointer flex items-center justify-center space-x-2 text-xs font-bold text-[#475569] hover:text-[#2563EB] transition shadow-sm">
-                  <Camera className="w-4 h-4 text-[#2563EB]" />
-                  <span>Snapshot</span>
-                  <input
-                    type="file"
-                    accept="image/*"
-                    capture="environment"
-                    onChange={handleMediaCapture}
-                    className="hidden"
-                  />
-                </label>
+          {/* Photo / Video Verification Proof Upload */}
+          <div>
+            <label className="block text-xs font-bold text-slate-900 mb-1.5">
+              Attach On-Scene Photo or Video Proof (Optional)
+            </label>
+            <label className="flex flex-col items-center justify-center p-4 border-2 border-dashed border-slate-300 rounded-2xl hover:border-blue-500 bg-slate-50/50 hover:bg-blue-50/30 cursor-pointer transition">
+              <div className="flex items-center space-x-2 text-slate-600 font-bold text-xs">
+                <Camera className="w-5 h-5 text-blue-600" />
+                <span>Snap Camera Photo or Video Proof</span>
               </div>
-            ) : (
-              <div className="p-3 rounded-xl bg-white border border-[#BBF7D0] flex items-center justify-between gap-3">
-                <div className="flex items-center space-x-2.5 text-xs text-[#15803D] font-bold">
-                  <ShieldCheck className="w-5 h-5 text-[#16A34A] flex-shrink-0" />
-                  <div>
-                    <div>Camera Verification Attached</div>
-                    <div className="text-[10px] text-[#64748B] font-mono">
+              <span className="text-[11px] text-slate-400 mt-1 font-medium">
+                Helps dispatchers authenticate your request and prioritize medical teams
+              </span>
+              <input
+                type="file"
+                accept="image/*,video/*"
+                capture="environment"
+                onChange={handleMediaCapture}
+                className="hidden"
+              />
+            </label>
+
+            {mediaPreview && (
+              <div className="mt-3 p-3 rounded-xl bg-slate-100 border border-slate-300 flex items-center justify-between">
+                <div className="flex items-center space-x-3 overflow-hidden">
+                  {isVideoProof ? (
+                    <video src={mediaPreview} className="w-12 h-12 rounded-lg object-cover bg-black flex-shrink-0" />
+                  ) : (
+                    <img src={mediaPreview} alt="Proof" className="w-12 h-12 rounded-lg object-cover flex-shrink-0" />
+                  )}
+                  <div className="truncate">
+                    <div className="text-xs font-bold text-slate-900 flex items-center space-x-1">
+                      <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                      <span>{isVideoProof ? 'Video Evidence' : 'Photo Evidence'} Attached</span>
+                    </div>
+                    <div className="text-[10px] text-slate-500 font-mono">
                       {isVideoProof ? 'Live Video Recording (Authentic Scene)' : 'Live Camera Photo (On-Site Capture)'}
                     </div>
                   </div>
@@ -206,7 +222,7 @@ export default function EnrichmentForm({ request, onComplete, onSkip }) {
                 <button
                   type="button"
                   onClick={clearMedia}
-                  className="p-1.5 rounded-lg hover:bg-[#FEE2E2] text-[#B91C1C] transition"
+                  className="p-1.5 rounded-lg hover:bg-red-100 text-red-700 transition"
                   title="Remove proof"
                 >
                   <X className="w-4 h-4" />
@@ -219,25 +235,85 @@ export default function EnrichmentForm({ request, onComplete, onSkip }) {
             <button
               type="button"
               onClick={onSkip}
-              className="w-1/2 py-3 px-4 rounded-xl bg-[#F1F5F9] hover:bg-[#E2E8F0] border border-[#CBD5E1] text-[#475569] text-xs sm:text-sm font-bold transition"
+              className="w-1/2 py-3 px-4 rounded-xl bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-700 text-xs sm:text-sm font-bold transition cursor-pointer"
             >
               Skip to Live Status
             </button>
             <button
               type="submit"
               disabled={isSaving}
-              className={`w-1/2 py-3 px-4 rounded-xl text-white text-xs sm:text-sm font-bold shadow-md transition flex items-center justify-center space-x-1.5 ${
+              className={`w-1/2 py-3 px-4 rounded-xl text-white text-xs sm:text-sm font-bold shadow-md transition flex items-center justify-center space-x-1.5 cursor-pointer ${
                 isCritical
-                  ? 'bg-[#DC2626] hover:bg-[#B91C1C] shadow-red-600/30'
-                  : 'bg-[#2563EB] hover:bg-[#1D4ED8] shadow-blue-600/30'
+                  ? 'bg-red-600 hover:bg-red-700 shadow-red-600/20'
+                  : 'bg-blue-600 hover:bg-blue-700 shadow-blue-600/20'
               }`}
             >
               <span>{isSaving ? 'Saving...' : 'Save & Track Live'}</span>
               <ArrowRight className="w-4 h-4" />
             </button>
           </div>
+
+          <div className="mt-4 pt-3 border-t border-slate-200 text-center">
+            <button
+              type="button"
+              onClick={() => setIsCancelModalOpen(true)}
+              className="text-xs text-red-600 hover:text-red-700 font-bold hover:underline inline-flex items-center space-x-1 cursor-pointer"
+            >
+              <XCircle className="w-3.5 h-3.5" />
+              <span>Accidentally pressed? Cancel this emergency</span>
+            </button>
+          </div>
         </form>
       </div>
+
+      {/* Accidental Cancel Confirmation Modal */}
+      {isCancelModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-xs animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200">
+            <div className="w-14 h-14 rounded-2xl bg-red-50 border border-red-200 flex items-center justify-center mx-auto mb-4 text-red-600">
+              <AlertTriangle className="w-7 h-7" />
+            </div>
+
+            <h3 className="text-xl font-black text-slate-900 text-center tracking-tight">
+              Cancel Emergency Request?
+            </h3>
+
+            <p className="text-xs text-slate-600 text-center mt-2 leading-relaxed">
+              Are you sure you want to cancel this request? It will be immediately removed from the volunteer feed, triage queue, and live crisis map.
+            </p>
+
+            <div className="mt-6 flex items-center gap-2.5">
+              <button
+                type="button"
+                disabled={isCancelling}
+                onClick={handleConfirmCancel}
+                className="flex-1 py-3 px-4 rounded-xl bg-red-600 hover:bg-red-700 text-white font-black text-xs transition flex items-center justify-center space-x-2 cursor-pointer disabled:opacity-50 shadow-md shadow-red-600/20"
+              >
+                {isCancelling ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>Cancelling...</span>
+                  </>
+                ) : (
+                  <>
+                    <XCircle className="w-4 h-4" />
+                    <span>Yes, Cancel Request</span>
+                  </>
+                )}
+              </button>
+              <button
+                type="button"
+                disabled={isCancelling}
+                onClick={() => setIsCancelModalOpen(false)}
+                className="py-3 px-5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition cursor-pointer"
+              >
+                Keep Active
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }

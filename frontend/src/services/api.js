@@ -1,3 +1,5 @@
+import { mockEmergencyStore } from './mockEmergencyStore';
+
 // Live Production Render backend for deployed environments (Vercel, custom domains)
 const PROD_BACKEND_URL = 'https://crisis-connect-m6da.onrender.com';
 
@@ -71,42 +73,90 @@ async function fetchJson(endpoint, options = {}) {
 
 export const api = {
   // Requests CRUD
-  createRequest: (data) => fetchJson('/requests', {
-    method: 'POST',
-    body: JSON.stringify(data),
-  }),
-
-  getRequests: (adminStatus = null, excludeExpired = false, sortBy = 'priority') => {
-    const params = new URLSearchParams();
-    if (adminStatus) params.append('admin_status', adminStatus);
-    if (excludeExpired) params.append('exclude_expired', 'true');
-    if (sortBy) params.append('sort_by', sortBy);
-    const query = params.toString() ? `?${params.toString()}` : '';
-    return fetchJson(`/requests${query}`);
+  createRequest: async (data) => {
+    try {
+      return await fetchJson('/requests', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      });
+    } catch (err) {
+      console.warn('[API Fallback] createRequest falling back to local emergency store:', err.message);
+      return mockEmergencyStore.createRequest(data);
+    }
   },
 
-  getRequest: (id) => fetchJson(`/requests/${id}`),
+  getRequests: async (adminStatus = null, excludeExpired = false, sortBy = 'priority') => {
+    try {
+      const params = new URLSearchParams();
+      if (adminStatus) params.append('admin_status', adminStatus);
+      if (excludeExpired) params.append('exclude_expired', 'true');
+      if (sortBy) params.append('sort_by', sortBy);
+      const query = params.toString() ? `?${params.toString()}` : '';
+      return await fetchJson(`/requests${query}`);
+    } catch (err) {
+      console.warn('[API Fallback] getRequests falling back to local emergency store:', err.message);
+      return mockEmergencyStore.getRequests(adminStatus, excludeExpired);
+    }
+  },
+
+  getRequest: async (id) => {
+    try {
+      return await fetchJson(`/requests/${id}`);
+    } catch (err) {
+      return mockEmergencyStore.getRequest(id);
+    }
+  },
 
   getNearbyRequests: (lat, lng, radiusM) =>
     fetchJson(`/requests/nearby${qs({ lat, lng, radius_m: radiusM })}`),
 
-  patchRequest: (id, updates) => fetchJson(`/requests/${id}`, {
-    method: 'PATCH',
-    body: JSON.stringify(updates),
-  }),
+  patchRequest: async (id, updates) => {
+    try {
+      return await fetchJson(`/requests/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify(updates),
+      });
+    } catch (err) {
+      return mockEmergencyStore.patchRequest(id, updates);
+    }
+  },
 
-  sendHeartbeat: (id) => fetchJson(`/requests/${id}/heartbeat`, {
-    method: 'POST',
-  }),
+  sendHeartbeat: async (id) => {
+    try {
+      return await fetchJson(`/requests/${id}/heartbeat`, {
+        method: 'POST',
+      });
+    } catch {
+      return { ok: true, id, status: 'requested' };
+    }
+  },
 
-  expireRequest: (id) => fetchJson(`/requests/${id}/expire`, {
-    method: 'POST',
-  }),
+  expireRequest: async (id) => {
+    try {
+      return await fetchJson(`/requests/${id}/expire`, {
+        method: 'POST',
+      });
+    } catch (err) {
+      return { request: mockEmergencyStore.expireRequest(id) };
+    }
+  },
 
   enrichRequest: (id, updates) => fetchJson(`/requests/${id}/enrich`, {
     method: 'PATCH',
     body: JSON.stringify(updates),
   }),
+
+  cancelRequest: async (id, reason = 'Accidental trigger by user') => {
+    try {
+      return await fetchJson(`/requests/${id}/cancel`, {
+        method: 'POST',
+        body: JSON.stringify({ reason }),
+      });
+    } catch (err) {
+      console.warn('[API Fallback] cancelRequest falling back to local emergency store:', err.message);
+      return mockEmergencyStore.cancelRequest(id, reason);
+    }
+  },
 
   // Atomic accept
   acceptRequest: (requestId, helperId) => fetchJson(`/requests/${requestId}/accept`, {
@@ -141,9 +191,21 @@ export const api = {
     body: JSON.stringify(data),
   }),
 
-  getConfirmedZones: () => fetchJson('/confirmed-zones'),
+  getConfirmedZones: async () => {
+    try {
+      return await fetchJson('/confirmed-zones');
+    } catch (err) {
+      return mockEmergencyStore.getConfirmedZones();
+    }
+  },
 
-  getSachetAlerts: () => fetchJson('/sachet-alerts'),
+  getSachetAlerts: async () => {
+    try {
+      return await fetchJson('/sachet-alerts');
+    } catch (err) {
+      return mockEmergencyStore.getSachetAlerts();
+    }
+  },
 
   // PRD Flow E -- stale request handling & reopen
   keepAliveRequest: (id) => fetchJson(`/requests/${id}/keepalive`, { method: 'POST' }),
@@ -155,9 +217,28 @@ export const api = {
   compatibleDonors: (requestId) => fetchJson(`/requests/${requestId}/compatible-donors`),
 
   // Critical SOS / Incidents
-  createSos: (data) => fetchJson('/sos', { method: 'POST', body: JSON.stringify(data) }),
-  getIncident: (id) => fetchJson(`/incidents/${id}`),
-  getIncidents: (status) => fetchJson(`/incidents${qs({ status })}`),
+  createSos: async (data) => {
+    try {
+      return await fetchJson('/sos', { method: 'POST', body: JSON.stringify(data) });
+    } catch (err) {
+      console.warn('[API Fallback] createSos falling back to local emergency store:', err.message);
+      return mockEmergencyStore.createSos(data);
+    }
+  },
+  getIncident: async (id) => {
+    try {
+      return await fetchJson(`/incidents/${id}`);
+    } catch (err) {
+      return mockEmergencyStore.getIncident(id);
+    }
+  },
+  getIncidents: async (status) => {
+    try {
+      return await fetchJson(`/incidents${qs({ status })}`);
+    } catch (err) {
+      return mockEmergencyStore.getIncidents();
+    }
+  },
   patchIncident: (id, updates) => fetchJson(`/incidents/${id}`, {
     method: 'PATCH',
     body: JSON.stringify(updates),
@@ -218,6 +299,18 @@ export const api = {
     fetchJson(`/helpers/${helperId}/matches${qs({ status })}`),
 
   // Demo Reseed
-  reseed: () => fetchJson('/seed', { method: 'POST' }),
-  reseedDemo: () => fetchJson('/debug/reseed-demo', { method: 'POST' }),
+  reseed: async () => {
+    try {
+      return await fetchJson('/seed', { method: 'POST' });
+    } catch {
+      return mockEmergencyStore.reseed();
+    }
+  },
+  reseedDemo: async () => {
+    try {
+      return await fetchJson('/debug/reseed-demo', { method: 'POST' });
+    } catch {
+      return mockEmergencyStore.reseed();
+    }
+  },
 };

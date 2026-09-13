@@ -100,6 +100,10 @@ class RequestReopen(BaseModel):
     reason: Optional[str] = None
 
 
+class RequestCancel(BaseModel):
+    reason: Optional[str] = None
+
+
 class RequestEnrich(BaseModel):
     """PRD step 2 -- optional, skippable enrichment after instant submit."""
     requester_name: Optional[str] = None
@@ -111,8 +115,8 @@ class RequestEnrich(BaseModel):
 
 
 class RequestAdminPatch(BaseModel):
-    admin_status: Optional[Literal["pending", "approved", "rejected", "flagged"]] = None
-    status: Optional[Literal["requested", "matched", "in_progress", "resolved", "expired"]] = None
+    admin_status: Optional[Literal["pending", "approved", "rejected", "flagged", "cancelled"]] = None
+    status: Optional[Literal["requested", "matched", "in_progress", "resolved", "expired", "cancelled"]] = None
 
 
 class AcceptBody(BaseModel):

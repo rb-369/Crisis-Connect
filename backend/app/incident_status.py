@@ -105,7 +105,7 @@ async def maybe_auto_resolve(conn, incident_id):
     remaining = await conn.fetchval(
         """
         select count(*) from requests
-         where incident_id = $1 and status not in ('resolved', 'expired')
+         where incident_id = $1 and status not in ('resolved', 'expired', 'cancelled')
         """,
         incident_id,
     )

@@ -23,7 +23,8 @@ import {
   Trash2,
   CheckCircle2,
   AlertOctagon,
-  Flame
+  Flame,
+  XCircle,
 } from 'lucide-react';
 import { api } from '../../services/api';
 import { CrisisWebSocketClient } from '../../services/websocket';
@@ -161,7 +162,45 @@ export default function AdminMap() {
       'admin',
       'all',
       (payload) => {
-        if (payload.event === 'new_request' && payload.data) {
+        if (payload.event === 'request_cancelled' || payload.data?.status === 'cancelled') {
+          const cancelId = payload.data?.id || payload.data?.request_id;
+          setRequests((prev) => prev.filter((r) => r.id !== cancelId));
+          if (markersRef.current[cancelId]) {
+            if (markersRef.current[cancelId].element) {
+              markersRef.current[cancelId].element.classList.add('pin-fade-out-anim');
+            }
+            setTimeout(() => {
+              if (markersRef.current[cancelId]) {
+                if (typeof markersRef.current[cancelId].destroy === 'function') {
+                  markersRef.current[cancelId].destroy();
+                } else {
+                  markersRef.current[cancelId].marker?.remove();
+                }
+                delete markersRef.current[cancelId];
+              }
+            }, 300);
+          }
+          const volId = `vol-${cancelId}`;
+          if (markersRef.current[volId]) {
+            if (markersRef.current[volId].element) {
+              markersRef.current[volId].element.classList.add('pin-fade-out-anim');
+            }
+            setTimeout(() => {
+              if (markersRef.current[volId]) {
+                if (typeof markersRef.current[volId].destroy === 'function') {
+                  markersRef.current[volId].destroy();
+                } else {
+                  markersRef.current[volId].marker?.remove();
+                }
+                delete markersRef.current[volId];
+              }
+            }, 300);
+          }
+          if (selectedItem?.id === cancelId) {
+            setSelectedItem(null);
+          }
+        } else if (payload.event === 'new_request' && payload.data) {
+          if (payload.data.status === 'cancelled') return;
           const newReq = payload.data;
           setRequests((prev) => {
             if (prev.some((r) => r.id === newReq.id)) return prev;
@@ -170,11 +209,28 @@ export default function AdminMap() {
           setIncomingAlert(newReq);
           setTimeout(() => setIncomingAlert(null), 6000);
         } else if (payload.event === 'status_update' || payload.event === 'matched') {
-          setRequests((prev) =>
-            prev.map((r) => (r.id === payload.data.id ? { ...r, ...payload.data } : r))
-          );
-          if (selectedItem?.id === payload.data.id) {
-            setSelectedItem((prev) => ({ ...prev, ...payload.data }));
+          if (payload.data?.status === 'cancelled') {
+            const cancelId = payload.data.id || payload.data.request_id;
+            setRequests((prev) => prev.filter((r) => r.id !== cancelId));
+            if (markersRef.current[cancelId]) {
+              markersRef.current[cancelId].marker?.remove();
+              delete markersRef.current[cancelId];
+            }
+            const volId = `vol-${cancelId}`;
+            if (markersRef.current[volId]) {
+              markersRef.current[volId].marker?.remove();
+              delete markersRef.current[volId];
+            }
+            if (selectedItem?.id === cancelId) {
+              setSelectedItem(null);
+            }
+          } else {
+            setRequests((prev) =>
+              prev.map((r) => (r.id === payload.data.id ? { ...r, ...payload.data } : r))
+            );
+            if (selectedItem?.id === payload.data.id) {
+              setSelectedItem((prev) => ({ ...prev, ...payload.data }));
+            }
           }
         }
       }
@@ -340,6 +396,7 @@ export default function AdminMap() {
 
     // B. Filter requests based on active toolbar filter
     const visibleRequests = requests.filter((r) => {
+      if (r.status === 'cancelled') return false;
       if (activeFilter === 'urgent') return r.urgency === 'high';
       if (activeFilter === 'blood') return r.category === 'blood';
       if (activeFilter === 'unassigned') return r.status === 'requested';
@@ -442,6 +499,11 @@ export default function AdminMap() {
   const handleConfirmRemovePin = () => {
     if (!pinToRemove) return;
     const targetId = pinToRemove.id;
+
+    // Synchronize cancellation with backend/mock store
+    if (api && api.cancelRequest) {
+      api.cancelRequest(targetId, 'Cancelled / Dismissed from live GIS map').catch(console.warn);
+    }
 
     // Add target ID and paired volunteer ID to dismissed set
     setDismissedPinIds((prev) => new Set([...prev, targetId, `vol-${targetId}`]));
@@ -867,6 +929,15 @@ export default function AdminMap() {
                         Reject
                       </button>
                     </div>
+
+                    <button
+                      disabled={actionLoading}
+                      onClick={() => handleMapCancel(selectedItem.id)}
+                      className="w-full py-2 px-3 rounded-xl bg-slate-100 hover:bg-red-50 text-red-600 border border-slate-300 hover:border-red-300 font-extrabold text-xs transition flex items-center justify-center space-x-1.5 cursor-pointer shadow-2xs"
+                    >
+                      <XCircle className="w-3.5 h-3.5 text-red-500" />
+                      <span>Cancel Emergency (False Alarm / Remove Pin)</span>
+                    </button>
                   </div>
                 )}
               </div>

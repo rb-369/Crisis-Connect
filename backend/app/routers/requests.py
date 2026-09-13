@@ -14,7 +14,7 @@ from fastapi.responses import JSONResponse
 
 from .. import blood, config, db, events, incident_status, serialize, verification
 from ..ids import parse_uuid
-from ..schemas import AcceptBody, RequestAdminPatch, RequestCreate, RequestEnrich, RequestReopen
+from ..schemas import AcceptBody, RequestAdminPatch, RequestCancel, RequestCreate, RequestEnrich, RequestReopen
 from ..ws import manager
 
 log = logging.getLogger("crisisconnect.requests")
@@ -51,7 +51,7 @@ DUPLICATE_SQL = """
 select coalesce(r.linked_request_id, r.id) as root_id
   from requests r
  where r.category = $1
-   and r.status not in ('resolved', 'expired')
+   and r.status not in ('resolved', 'expired', 'cancelled')
    and r.created_at >= now() - ($2::int * interval '1 minute')
    and earth_distance(ll_to_earth(r.lat, r.lng), ll_to_earth($3, $4)) <= $5::float8
    and (
@@ -202,6 +202,10 @@ async def list_requests(
         "($1::text is null or r.status = $1)",
         "($2::text is null or r.admin_status = $2)",
     ]
+    if status != "cancelled":
+        where_clauses.append("r.status <> 'cancelled'")
+    if admin_status != "cancelled":
+        where_clauses.append("r.admin_status <> 'cancelled'")
     if exclude_expired:
         where_clauses.append("r.status <> 'expired'")
 
@@ -358,6 +362,7 @@ update requests
  where id = $1
    and status = 'requested'
    and admin_status <> 'rejected'
+   and admin_status <> 'cancelled'
 returning *
 """
 
@@ -739,3 +744,66 @@ async def reopen_request(request_id: str, body: RequestReopen):
     await manager.broadcast(events.GLOBAL, events.STATUS_UPDATE, out)
     log.info("request %s reopened (reason: %s)", rid, body.reason)
     return out
+
+
+@router.post("/requests/{request_id}/cancel")
+async def cancel_request(request_id: str, body: RequestCancel | None = None):
+    """Explicitly cancels an accidental emergency or retracted distress request.
+
+    Updates status to 'cancelled', marks match as 'cancelled', auto-resolves
+    any lone linked incident, and broadcasts 'request_cancelled' so that
+    triage queues and live GIS maps immediately prune the emergency in real time.
+    """
+    rid = parse_uuid(request_id, "request_id")
+    cancel_reason = (body.reason if body and body.reason else "Accidental emergency trigger cancelled by user").strip()
+
+    async with db.pool().acquire() as conn:
+        async with conn.transaction():
+            row = await conn.fetchrow(
+                """
+                update requests
+                   set status = 'cancelled',
+                       admin_status = 'cancelled',
+                       details = coalesce(details, '') || ' [CANCELLED: ' || $2::text || ']',
+                       updated_at = now()
+                 where id = $1
+                   and status <> 'cancelled'
+                returning *
+                """,
+                rid, cancel_reason,
+            )
+            if row is None:
+                existing = await conn.fetchrow("select * from requests where id = $1", rid)
+                if existing is None:
+                    raise HTTPException(404, "request not found")
+                return serialize.row(existing)
+
+            match = await conn.fetchrow(
+                """
+                update matches set status = 'cancelled'
+                 where request_id = $1 and status <> 'resolved'
+                returning *
+                """,
+                rid,
+            )
+
+            if row["incident_id"] is not None:
+                await incident_status.maybe_auto_resolve(conn, row["incident_id"])
+
+    out = serialize.row(row)
+    out["cancelled"] = True
+    out["cancel_reason"] = cancel_reason
+
+    await manager.broadcast(events.request_channel(rid), events.STATUS_UPDATE, out)
+    await manager.broadcast(events.GLOBAL, events.STATUS_UPDATE, out)
+    await manager.broadcast(events.GLOBAL, "request_cancelled", out)
+
+    if match is not None:
+        await manager.broadcast(
+            events.match_channel(match["id"]), events.STATUS_UPDATE,
+            {"match": serialize.row(match), "request": out},
+        )
+
+    log.info("request %s cancelled by requester (reason: %s)", rid, cancel_reason)
+    return out
+

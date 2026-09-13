@@ -5,6 +5,16 @@
  */
 const PROD_WS_URL = 'wss://crisis-connect-m6da.onrender.com';
 
+export function broadcastCrisisEvent(channelType, eventPayload) {
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(
+      new CustomEvent('crisisconnect:ws_broadcast', {
+        detail: { channelType, payload: eventPayload },
+      })
+    );
+  }
+}
+
 export class CrisisWebSocketClient {
   constructor(channelType, channelId, onMessage, onStatusChange) {
     this.channelType = channelType;
@@ -16,6 +26,29 @@ export class CrisisWebSocketClient {
     this.maxReconnectAttempts = 10;
     this.reconnectTimeout = null;
     this.isClosedManually = false;
+
+    this.localBroadcastListener = (e) => {
+      const { channelType: targetChannel, payload } = e.detail || {};
+      if (
+        !targetChannel ||
+        targetChannel === this.channelType ||
+        this.channelType === 'admin' ||
+        targetChannel === 'admin'
+      ) {
+        if (this.onMessage) {
+          try {
+            this.onMessage(payload);
+          } catch (err) {
+            console.error('[Local Broadcast Handler Error]:', err);
+          }
+        }
+      }
+    };
+
+    if (typeof window !== 'undefined') {
+      window.addEventListener('crisisconnect:ws_broadcast', this.localBroadcastListener);
+    }
+
     this.connect();
   }
 
@@ -111,6 +144,9 @@ export class CrisisWebSocketClient {
 
   close() {
     this.isClosedManually = true;
+    if (this.localBroadcastListener && typeof window !== 'undefined') {
+      window.removeEventListener('crisisconnect:ws_broadcast', this.localBroadcastListener);
+    }
     if (this.reconnectTimeout) {
       clearTimeout(this.reconnectTimeout);
     }

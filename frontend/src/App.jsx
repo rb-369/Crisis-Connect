@@ -86,6 +86,19 @@ export default function App() {
     setRequesterStep('report');
   };
 
+  const handleCancelEmergency = async (requestId, reason = 'Accidental trigger by user') => {
+    const targetId = requestId || activeRequest?.id;
+    if (targetId) {
+      try {
+        await api.cancelRequest(targetId, reason);
+      } catch (err) {
+        console.warn('Cancel API warning (proceeding with local cancellation):', err.message);
+      }
+    }
+    setActiveRequest(null);
+    setRequesterStep('report');
+  };
+
   const handleOpenAuthModal = (role = 'volunteer') => {
     setAuthModalDefaultRole(role);
     setIsAuthModalOpen(true);
@@ -151,6 +164,7 @@ export default function App() {
                 request={activeRequest}
                 onComplete={handleEnrichmentComplete}
                 onSkip={handleEnrichmentSkip}
+                onCancelEmergency={handleCancelEmergency}
               />
             )}
 
@@ -160,11 +174,13 @@ export default function App() {
                   <SosStatusView
                     result={activeRequest}
                     onReturnHome={handleStartNewRequest}
+                    onCancelEmergency={handleCancelEmergency}
                   />
                 ) : (
                   <LiveStatusTracker
                     initialRequest={activeRequest}
                     onNewRequest={handleStartNewRequest}
+                    onCancelEmergency={handleCancelEmergency}
                   />
                 )}
               </ErrorBoundary>

@@ -13,6 +13,7 @@ import {
   Sparkles,
   ShieldCheck,
   XCircle,
+  Lock,
 } from 'lucide-react';
 import { api } from '../../services/api';
 import { CrisisWebSocketClient } from '../../services/websocket';
@@ -23,6 +24,18 @@ export default function AdminDashboard({ onOpenMap, currentUser, onOpenAuthModal
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState(''); // '' = all, 'pending', 'approved', 'rejected', 'flagged'
   const [actionInProgress, setActionInProgress] = useState(null);
+  const [authPrompt, setAuthPrompt] = useState(null);
+
+  const isNgoAdmin = Boolean(currentUser && (currentUser.role === 'ngo' || currentUser.role === 'ngo_admin'));
+
+  const requireNgoAuth = (actionLabel = 'perform moderation actions') => {
+    if (isNgoAdmin) return true;
+    setAuthPrompt(`NGO Admin Login Required: Only verified NGO dispatchers are authorized to ${actionLabel}. Please sign in to continue.`);
+    if (onOpenAuthModal) {
+      onOpenAuthModal('ngo');
+    }
+    return false;
+  };
 
   const fetchRequests = async () => {
     setLoading(true);
@@ -85,6 +98,7 @@ export default function AdminDashboard({ onOpenMap, currentUser, onOpenAuthModal
   }, [statusFilter]);
 
   const handleTriage = async (requestId, newAdminStatus) => {
+    if (!requireNgoAuth(`${newAdminStatus} emergency requests`)) return;
     setActionInProgress(requestId);
     try {
       const updated = await api.patchRequest(requestId, { admin_status: newAdminStatus });
@@ -99,6 +113,7 @@ export default function AdminDashboard({ onOpenMap, currentUser, onOpenAuthModal
   };
 
   const handleExpire = async (requestId) => {
+    if (!requireNgoAuth('expire emergency requests')) return;
     if (!window.confirm('Mark this emergency request as expired / stale to remove it from volunteer feeds?')) return;
     setActionInProgress(requestId);
     try {
@@ -114,6 +129,7 @@ export default function AdminDashboard({ onOpenMap, currentUser, onOpenAuthModal
   };
 
   const handleCancelEmergency = async (requestId) => {
+    if (!requireNgoAuth('cancel emergency requests')) return;
     if (!window.confirm('Cancel this emergency request as an accidental trigger or false alarm? It will be removed from the triage queue and live map.')) return;
     setActionInProgress(requestId);
     try {
@@ -167,7 +183,7 @@ export default function AdminDashboard({ onOpenMap, currentUser, onOpenAuthModal
       </div>
 
       {/* Verified NGO Status Banner / Verification Prompt */}
-      {currentUser && currentUser.role === 'ngo' ? (
+      {isNgoAdmin ? (
         <div className="mb-5 p-4 rounded-2xl bg-[#DCFCE7] border border-[#BBF7D0] flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs shadow-sm">
           <div className="flex items-center space-x-3">
             <ShieldCheck className="w-6 h-6 text-[#16A34A] flex-shrink-0" />
@@ -190,21 +206,52 @@ export default function AdminDashboard({ onOpenMap, currentUser, onOpenAuthModal
           <div className="flex items-center space-x-3">
             <AlertTriangle className="w-6 h-6 text-[#D97706] flex-shrink-0" />
             <div>
-              <div className="font-extrabold text-[#B45309] text-sm">
-                Viewing in Public Triage Preview Mode
+              <div className="font-extrabold text-[#B45309] text-sm flex items-center space-x-2">
+                <span>Viewing in Public Triage Preview Mode</span>
+                <span className="px-2 py-0.5 rounded bg-amber-200 text-amber-900 font-mono text-[10px] uppercase font-bold">Moderation Restricted</span>
               </div>
               <p className="text-[#92400E] font-medium mt-0.5">
-                Complete multi-step NGO verification to attach official agency credentials & Darpan authorization to moderation decisions.
+                Sign in with official NGO Agency / Darpan credentials to approve, flag, reject, expire, or cancel emergency dispatches.
               </p>
             </div>
           </div>
           <button
-            onClick={onOpenAuthModal}
-            className="px-3.5 py-2 rounded-xl bg-[#D97706] hover:bg-[#B45309] text-white font-bold transition shadow-sm self-start sm:self-auto flex-shrink-0 flex items-center space-x-1.5"
+            onClick={() => onOpenAuthModal && onOpenAuthModal('ngo')}
+            className="px-3.5 py-2 rounded-xl bg-[#D97706] hover:bg-[#B45309] text-white font-bold transition shadow-sm self-start sm:self-auto flex-shrink-0 flex items-center space-x-1.5 cursor-pointer"
           >
             <ShieldCheck className="w-4 h-4" />
-            <span>Verify NGO Credentials &rarr;</span>
+            <span>Login as NGO Agency &rarr;</span>
           </button>
+        </div>
+      )}
+
+      {/* Auth Prompt Toast / Alert if user clicked moderation button while unauthenticated */}
+      {authPrompt && (
+        <div className="mb-5 p-4 rounded-2xl bg-red-50 border-2 border-red-300 text-red-900 text-xs font-bold flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-md animate-pulse">
+          <div className="flex items-center space-x-2.5">
+            <Lock className="w-5 h-5 text-red-600 flex-shrink-0" />
+            <div>
+              <p className="font-extrabold text-sm text-red-800">Action Restricted &bull; NGO Authentication Required</p>
+              <p className="text-red-700 font-medium mt-0.5">{authPrompt}</p>
+            </div>
+          </div>
+          <div className="flex items-center space-x-2 self-start sm:self-auto">
+            <button
+              onClick={() => {
+                if (onOpenAuthModal) onOpenAuthModal('ngo');
+              }}
+              className="px-3.5 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white font-black transition shadow-sm flex items-center space-x-1.5 cursor-pointer"
+            >
+              <ShieldCheck className="w-4 h-4 text-white" />
+              <span>Login as NGO Admin</span>
+            </button>
+            <button
+              onClick={() => setAuthPrompt(null)}
+              className="p-2 rounded-xl text-red-500 hover:text-red-800 hover:bg-red-100 transition cursor-pointer"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
         </div>
       )}
 
@@ -415,10 +462,10 @@ export default function AdminDashboard({ onOpenMap, currentUser, onOpenAuthModal
                     <button
                       disabled={actionInProgress === req.id || req.admin_status === 'approved'}
                       onClick={() => handleTriage(req.id, 'approved')}
-                      title="Approve and push to volunteer matching queue"
-                      className="px-3.5 py-2 rounded-xl bg-[#16A34A] hover:bg-[#15803D] text-white text-xs font-bold transition flex items-center space-x-1.5 disabled:opacity-30 shadow-sm"
+                      title={isNgoAdmin ? "Approve and push to volunteer matching queue" : "NGO Admin Login Required to Approve"}
+                      className="px-3.5 py-2 rounded-xl bg-[#16A34A] hover:bg-[#15803D] text-white text-xs font-bold transition flex items-center space-x-1.5 disabled:opacity-30 shadow-sm cursor-pointer"
                     >
-                      <Check className="w-4 h-4" />
+                      {!isNgoAdmin ? <Lock className="w-3.5 h-3.5 text-emerald-200" /> : <Check className="w-4 h-4" />}
                       <span>Approve</span>
                     </button>
 
@@ -426,10 +473,10 @@ export default function AdminDashboard({ onOpenMap, currentUser, onOpenAuthModal
                     <button
                       disabled={actionInProgress === req.id || req.admin_status === 'flagged'}
                       onClick={() => handleTriage(req.id, 'flagged')}
-                      title="Flag for location verification or investigation"
-                      className="px-3 py-2 rounded-xl bg-[#D97706] hover:bg-[#B45309] text-white text-xs font-bold transition flex items-center space-x-1.5 disabled:opacity-30 shadow-sm"
+                      title={isNgoAdmin ? "Flag for location verification or investigation" : "NGO Admin Login Required to Flag"}
+                      className="px-3 py-2 rounded-xl bg-[#D97706] hover:bg-[#B45309] text-white text-xs font-bold transition flex items-center space-x-1.5 disabled:opacity-30 shadow-sm cursor-pointer"
                     >
-                      <Flag className="w-3.5 h-3.5" />
+                      {!isNgoAdmin ? <Lock className="w-3.5 h-3.5 text-amber-200" /> : <Flag className="w-3.5 h-3.5" />}
                       <span>Flag</span>
                     </button>
 
@@ -437,10 +484,10 @@ export default function AdminDashboard({ onOpenMap, currentUser, onOpenAuthModal
                     <button
                       disabled={actionInProgress === req.id || req.admin_status === 'rejected'}
                       onClick={() => handleTriage(req.id, 'rejected')}
-                      title="Reject fake or duplicate report"
+                      title={isNgoAdmin ? "Reject fake or duplicate report" : "NGO Admin Login Required to Reject"}
                       className="px-3.5 py-2 rounded-xl bg-[#DC2626] hover:bg-[#B91C1C] text-white text-xs font-bold transition flex items-center space-x-1.5 disabled:opacity-30 shadow-sm cursor-pointer"
                     >
-                      <X className="w-4 h-4" />
+                      {!isNgoAdmin ? <Lock className="w-3.5 h-3.5 text-red-200" /> : <X className="w-4 h-4" />}
                       <span>Reject</span>
                     </button>
 
@@ -449,10 +496,10 @@ export default function AdminDashboard({ onOpenMap, currentUser, onOpenAuthModal
                       <button
                         disabled={actionInProgress === req.id}
                         onClick={() => handleExpire(req.id)}
-                        title="Mark request as expired to remove from active volunteer radar"
+                        title={isNgoAdmin ? "Mark request as expired to remove from active volunteer radar" : "NGO Admin Login Required to Expire"}
                         className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-900 text-amber-300 text-xs font-bold transition flex items-center space-x-1.5 disabled:opacity-30 shadow-sm cursor-pointer"
                       >
-                        <Clock className="w-3.5 h-3.5 text-amber-400" />
+                        {!isNgoAdmin ? <Lock className="w-3.5 h-3.5 text-amber-400" /> : <Clock className="w-3.5 h-3.5 text-amber-400" />}
                         <span>Expire</span>
                       </button>
                     )}
@@ -462,10 +509,10 @@ export default function AdminDashboard({ onOpenMap, currentUser, onOpenAuthModal
                       <button
                         disabled={actionInProgress === req.id}
                         onClick={() => handleCancelEmergency(req.id)}
-                        title="Cancel accidental report or false alarm to remove from queue and map"
+                        title={isNgoAdmin ? "Cancel accidental report or false alarm to remove from queue and map" : "NGO Admin Login Required to Cancel"}
                         className="px-3 py-2 rounded-xl bg-slate-100 hover:bg-red-50 text-red-600 border border-slate-300 hover:border-red-300 text-xs font-bold transition flex items-center space-x-1 disabled:opacity-30 shadow-2xs cursor-pointer"
                       >
-                        <XCircle className="w-3.5 h-3.5 text-red-500" />
+                        {!isNgoAdmin ? <Lock className="w-3.5 h-3.5 text-red-400" /> : <XCircle className="w-3.5 h-3.5 text-red-500" />}
                         <span>Cancel SOS</span>
                       </button>
                     )}

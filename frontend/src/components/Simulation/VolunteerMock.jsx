@@ -177,8 +177,14 @@ export default function VolunteerMock({ currentUser, onOpenAuthModal }) {
       'volunteers',
       'all',
       (payload) => {
-        if (payload.event === 'new_request' && payload.data) {
+        if (payload.event === 'request_cancelled' || payload.data?.status === 'cancelled') {
+          const cancelId = payload.data?.id || payload.data?.request_id;
+          setRequests((prev) => prev.filter((r) => r.id !== cancelId));
+          setActiveMatch((prev) => (prev && prev.id === cancelId ? null : prev));
+          setIncomingAlert((prev) => (prev && prev.req?.id === cancelId ? null : prev));
+        } else if (payload.event === 'new_request' && payload.data) {
           const newReq = payload.data;
+          if (newReq.status === 'cancelled') return;
           const isBlood = newReq.category === 'blood';
           const reqBlood = newReq.service_details?.blood_group;
           const currentProfile = selectedDonorProfileRef.current;
@@ -320,6 +326,15 @@ export default function VolunteerMock({ currentUser, onOpenAuthModal }) {
     mapInstance.current.addControl(new maplibregl.NavigationControl(), 'top-right');
 
     mapInstance.current.on('load', () => {
+      // Trigger resize immediately and after render settling to prevent (0,0) unprojected pin coordinates
+      mapInstance.current?.resize();
+      setTimeout(() => {
+        mapInstance.current?.resize();
+      }, 100);
+      setTimeout(() => {
+        mapInstance.current?.resize();
+      }, 300);
+
       // Add GeoJSON Route Layer between volunteer and matched incident
       if (!mapInstance.current.getSource('route-source')) {
         mapInstance.current.addSource('route-source', {
@@ -351,6 +366,14 @@ export default function VolunteerMock({ currentUser, onOpenAuthModal }) {
     });
 
     return () => {
+      Object.values(markersRef.current).forEach((m) => {
+        try { m.remove(); } catch {}
+      });
+      markersRef.current = {};
+      if (volunteerMarkerRef.current) {
+        try { volunteerMarkerRef.current.remove(); } catch {}
+        volunteerMarkerRef.current = null;
+      }
       if (mapInstance.current) {
         mapInstance.current.remove();
         mapInstance.current = null;
@@ -360,10 +383,31 @@ export default function VolunteerMock({ currentUser, onOpenAuthModal }) {
 
   const visibleRequests = requests
     .filter((r) => {
+      // 1. Exclude cancelled emergencies
+      if (r.status === 'cancelled' || r.admin_status === 'cancelled') {
+        return false;
+      }
+      // 2. Exclude stale or resolved if active filter is on
       if (filterActiveOnly && (r.status === 'expired' || r.status === 'resolved')) {
         return false;
       }
+      // 3. Exclude requests that are already matched or in-progress with another responder
+      const isMatchedToOther = (r.status === 'matched' || r.status === 'en_route' || r.status === 'in_progress' || r.status === 'completed') &&
+        (!activeMatch || activeMatch.id !== r.id);
+      if (isMatchedToOther) {
+        return false;
+      }
+
+      const donorRole = selectedDonorProfile.role;
       const donorBlood = selectedDonorProfile.bloodGroup || selectedDonorProfile.blood_type;
+
+      // 4. Blood donors with "Only Receive Compatible Matches" enabled ONLY see compatible blood emergencies
+      if (filterCompatibleOnly && donorRole === 'blood_donor') {
+        if (r.category !== 'blood') return false;
+        const reqBlood = r.service_details?.blood_group;
+        return isDonorCompatible(donorBlood, reqBlood);
+      }
+
       if (filterCompatibleOnly && r.category === 'blood' && donorBlood) {
         const reqBlood = r.service_details?.blood_group;
         return isDonorCompatible(donorBlood, reqBlood);
@@ -410,7 +454,16 @@ export default function VolunteerMock({ currentUser, onOpenAuthModal }) {
 
     const volLng = Number(selectedDonorProfile?.lng);
     const volLat = Number(selectedDonorProfile?.lat);
-    if (!isNaN(volLng) && !isNaN(volLat)) {
+    if (
+      selectedDonorProfile?.lng &&
+      selectedDonorProfile?.lat &&
+      !isNaN(volLng) &&
+      !isNaN(volLat) &&
+      volLat >= 18.0 &&
+      volLat <= 20.5 &&
+      volLng >= 72.0 &&
+      volLng <= 73.5
+    ) {
       volunteerMarkerRef.current = new maplibregl.Marker({ element: volEl })
         .setLngLat([volLng, volLat])
         .setPopup(
@@ -437,11 +490,23 @@ export default function VolunteerMock({ currentUser, onOpenAuthModal }) {
     };
 
     visibleRequests.forEach((req) => {
-      currentIds.add(req.id);
       const reqLng = Number(req.lng);
       const reqLat = Number(req.lat);
-      if (isNaN(reqLng) || isNaN(reqLat)) return;
+      // Strictly enforce valid coordinates inside Mumbai metropolitan region
+      if (
+        !req.lng ||
+        !req.lat ||
+        isNaN(reqLng) ||
+        isNaN(reqLat) ||
+        reqLat < 18.0 ||
+        reqLat > 20.5 ||
+        reqLng < 72.0 ||
+        reqLng > 73.5
+      ) {
+        return;
+      }
 
+      currentIds.add(req.id);
       const isBlood = req.category === 'blood';
       const reqBlood = req.service_details?.blood_group;
       const donorBlood = selectedDonorProfile.bloodGroup;
@@ -942,7 +1007,7 @@ export default function VolunteerMock({ currentUser, onOpenAuthModal }) {
                   </h4>
                 </div>
                 <span className="text-[11px] font-mono text-[#64748B]">
-                  {requests.filter(r => r.status === 'requested').length} active pins in Mumbai
+                  {visibleRequests.filter(r => r.lat >= 18.0 && r.lat <= 20.5 && r.lng >= 72.0 && r.lng <= 73.5).length} active pins in Mumbai
                 </span>
               </div>
 

@@ -223,42 +223,43 @@ export default function InstantReport({ onRequestCreated }) {
         <button
           disabled={isSubmitting}
           onClick={handleMasterEmergencySOS}
-          className="w-full relative overflow-hidden group rounded-3xl p-6 sm:p-8 bg-gradient-to-r from-[#DC2626] via-[#B91C1C] to-[#991B1B] text-white shadow-2xl hover:shadow-red-600/40 hover:scale-[1.01] active:scale-[0.99] transition-all duration-200 border-4 border-white/20 text-left cursor-pointer"
+          className="w-full relative overflow-hidden group rounded-3xl p-6 sm:p-8 bg-gradient-to-br from-[#DC2626] via-[#B91C1C] to-[#7F1D1D] text-white glow-danger card-tactile border-4 border-white/25 text-left cursor-pointer transition-all duration-200"
         >
           {/* Animated Background Radar Waves */}
-          <div className="absolute -right-12 -bottom-12 w-64 h-64 rounded-full bg-white/10 blur-2xl group-hover:scale-150 transition duration-500" />
+          <div className="absolute -right-12 -bottom-12 w-72 h-72 rounded-full bg-white/10 blur-2xl group-hover:scale-150 transition duration-700" />
           <div className="absolute right-8 top-1/2 -translate-y-1/2 hidden md:flex items-center justify-center">
-            <div className="w-24 h-24 rounded-full bg-white/10 border-2 border-white/30 flex items-center justify-center animate-ping-slow">
-              <ShieldAlert className="w-12 h-12 text-white" />
+            <div className="w-28 h-28 rounded-full bg-white/10 border-2 border-white/30 flex items-center justify-center beacon-radar-pulse">
+              <ShieldAlert className="w-14 h-14 text-white drop-shadow-md" />
             </div>
           </div>
 
           <div className="relative z-10 max-w-xl">
-            <div className="flex items-center space-x-2.5 mb-2">
-              <span className="px-3 py-1 rounded-full bg-white text-[#DC2626] font-black text-xs uppercase tracking-widest flex items-center space-x-1.5 shadow-md">
+            <div className="flex items-center space-x-2.5 mb-2.5">
+              <span className="px-3.5 py-1 rounded-full bg-white text-[#DC2626] font-black text-xs uppercase tracking-widest flex items-center space-x-1.5 shadow-md">
                 <span className="w-2 h-2 rounded-full bg-[#DC2626] animate-ping" />
                 <span>Life-Critical Priority</span>
               </span>
-              <span className="text-xs font-mono text-red-100/90 font-bold hidden sm:inline">
-                Zero Login &bull; 1-Tap Trigger
+              <span className="text-xs font-mono text-red-100 font-extrabold bg-black/20 px-2.5 py-0.5 rounded-full border border-white/20 hidden sm:inline-flex items-center gap-1">
+                <Zap className="w-3 h-3 text-amber-300" />
+                <span>Zero Login &bull; 1-Tap Trigger</span>
               </span>
             </div>
 
-            <h1 className="text-2xl sm:text-4xl font-black tracking-tight leading-none text-white drop-shadow-sm">
+            <h1 className="text-3xl sm:text-5xl font-black tracking-tight leading-none text-white drop-shadow-md">
               EMERGENCY SOS
             </h1>
 
-            <p className="text-xs sm:text-sm text-red-100 font-semibold mt-2 leading-relaxed max-w-md">
-              Tap for immediate rescue. Broadcasts your live GPS coordinates directly to all nearby emergency response teams and NGOs.
+            <p className="text-xs sm:text-sm text-red-100 font-semibold mt-2.5 leading-relaxed max-w-md">
+              Instant life-saving rescue broadcast. Sends your live GPS coordinates directly to nearby volunteer responders and Darpan-verified NGO dispatch units.
             </p>
 
-            <div className="mt-4 flex flex-wrap items-center gap-3">
-              <div className="inline-flex items-center space-x-2 bg-black/25 backdrop-blur-md px-4 py-2 rounded-xl border border-white/20 text-xs font-black uppercase tracking-wider text-white group-hover:bg-white group-hover:text-[#DC2626] transition shadow-xs">
-                <Radio className="w-4 h-4 animate-pulse" />
+            <div className="mt-5 flex flex-wrap items-center gap-3">
+              <div className="inline-flex items-center space-x-2.5 bg-white text-[#B91C1C] px-5 py-2.5 rounded-xl font-black text-xs uppercase tracking-wider group-hover:bg-red-50 group-hover:shadow-lg transition shadow-md">
+                <Radio className="w-4 h-4 text-[#DC2626] animate-pulse" />
                 <span>Broadcast Master Distress Beacon Now &rarr;</span>
               </div>
-              <span className="text-[11px] text-red-200/90 font-medium">
-                Instant dispatch &bull; Accidental? Cancel easily on next screen
+              <span className="text-[11px] text-red-200 font-medium">
+                Accidental? Cancel instantly on the next screen
               </span>
             </div>
           </div>
@@ -268,32 +269,54 @@ export default function InstantReport({ onRequestCreated }) {
       {/* GPS Location Signal Bar */}
       <div className="mb-6 p-4 rounded-2xl bg-white border border-[#CBD5E1] shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="flex items-center space-x-3">
-          <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold ${
+          <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold shadow-xs ${
             gpsStatus === 'acquired' ? 'bg-[#DCFCE7] text-[#15803D]' : 'bg-[#FEF3C7] text-[#B45309]'
           }`}>
             <LocateFixed className="w-5 h-5" />
           </div>
           <div>
             <div className="font-extrabold text-xs sm:text-sm text-[#0F172A] flex items-center space-x-1.5">
-              <span>{gpsStatus === 'acquired' ? 'Exact GPS Location Locked' : gpsStatus === 'detecting' ? 'Acquiring GPS Signal...' : 'GPS Offline (Using Mumbai Coordinate Pin)'}</span>
+              <span>{gpsStatus === 'acquired' ? 'Exact GPS Location Locked' : gpsStatus === 'detecting' ? 'Acquiring GPS Signal...' : 'Location Calibrated (Mumbai Pin)'}</span>
               {gpsStatus === 'acquired' && (
                 <span className="w-2 h-2 rounded-full bg-[#15803D] inline-block animate-ping-slow" />
               )}
             </div>
             <div className="text-xs font-mono text-[#64748B]">
-              Coordinates: {Number(coords?.lat || 19.076).toFixed(5)}, {Number(coords?.lng || 72.8777).toFixed(5)} (Mumbai)
+              Coordinates: {Number(coords?.lat || 19.076).toFixed(5)}, {Number(coords?.lng || 72.8777).toFixed(5)} &bull; Accuracy: &plusmn;5m
             </div>
           </div>
         </div>
 
-        {/* Fallback pin-drop toggle */}
-        <button
-          onClick={() => setShowManualCoords(!showManualCoords)}
-          className="w-full sm:w-auto text-xs font-semibold px-3.5 py-2 rounded-xl bg-[#F1F5F9] hover:bg-[#E2E8F0] text-[#475569] border border-[#CBD5E1] transition flex items-center justify-center space-x-1.5"
-        >
-          <MapPin className="w-4 h-4 text-[#DC2626]" />
-          <span>{showManualCoords ? 'Hide Manual Calibration' : 'Adjust Coordinates Pin'}</span>
-        </button>
+        {/* Quick Demo Preset Hotspots & Manual toggle */}
+        <div className="flex flex-wrap items-center gap-1.5">
+          <button
+            onClick={() => {
+              setCoords({ lat: 19.0178, lng: 72.8478 });
+              setGpsStatus('manual');
+            }}
+            title="Calibrate to KEM Hospital Parel"
+            className="text-[11px] font-bold px-2.5 py-1.5 rounded-lg bg-[#F1F5F9] hover:bg-[#E2E8F0] text-[#0F172A] border border-[#CBD5E1] transition cursor-pointer"
+          >
+            🏥 KEM Hospital
+          </button>
+          <button
+            onClick={() => {
+              setCoords({ lat: 19.0688, lng: 72.8785 });
+              setGpsStatus('manual');
+            }}
+            title="Calibrate to Kurla Bail Bazar"
+            className="text-[11px] font-bold px-2.5 py-1.5 rounded-lg bg-[#F1F5F9] hover:bg-[#E2E8F0] text-[#0F172A] border border-[#CBD5E1] transition cursor-pointer"
+          >
+            🌊 Kurla West
+          </button>
+          <button
+            onClick={() => setShowManualCoords(!showManualCoords)}
+            className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-[#0F172A] hover:bg-slate-800 text-white transition flex items-center justify-center space-x-1 cursor-pointer"
+          >
+            <MapPin className="w-3.5 h-3.5 text-red-400" />
+            <span>{showManualCoords ? 'Done' : 'Calibrate'}</span>
+          </button>
+        </div>
       </div>
 
       {/* Manual Pin Adjuster (Fallback) */}
@@ -409,7 +432,7 @@ export default function InstantReport({ onRequestCreated }) {
                 backgroundColor: cat.bgColor,
                 borderColor: cat.borderColor,
               }}
-              className={`group relative text-left p-4 sm:p-5 rounded-2xl border-2 transition-all duration-150 shadow-sm hover:shadow-md hover:scale-[1.01] active:scale-[0.99] flex flex-col justify-between min-h-[135px] cursor-pointer ${
+              className={`group relative text-left p-4 sm:p-5 rounded-2xl border-2 transition-all duration-150 shadow-sm hover:shadow-md card-tactile flex flex-col justify-between min-h-[140px] cursor-pointer ${
                 isSelected ? 'ring-4 ring-[#DC2626]' : ''
               }`}
             >
@@ -417,19 +440,19 @@ export default function InstantReport({ onRequestCreated }) {
               <div className="flex items-start justify-between gap-2">
                 <div 
                   style={{ backgroundColor: 'white', color: cat.iconColor }}
-                  className="w-11 h-11 rounded-xl flex items-center justify-center shadow-sm border border-black/5 flex-shrink-0"
+                  className="w-11 h-11 rounded-xl flex items-center justify-center shadow-sm border border-black/10 flex-shrink-0 group-hover:scale-105 transition"
                 >
                   <Icon className="w-5 h-5" />
                 </div>
 
                 {cat.isLifeCritical ? (
-                  <span className="px-2 py-0.5 rounded-full bg-[#DC2626] text-white text-[10px] font-extrabold uppercase tracking-wider flex items-center space-x-1 shadow-sm">
+                  <span className="px-2.5 py-1 rounded-full bg-[#DC2626] text-white text-[10px] font-black uppercase tracking-wider flex items-center space-x-1 shadow-sm beacon-radar-pulse">
                     <span className="w-1.5 h-1.5 rounded-full bg-white animate-ping" />
                     <span>Critical 1-Tap</span>
                   </span>
                 ) : (
-                  <span className="px-2 py-0.5 rounded-full bg-white/80 text-[#475569] text-[10px] font-bold uppercase tracking-wider border border-black/5 shadow-2xs">
-                    {cat.id === 'blood' ? '🩸 Mandatory Blood Type' : 'Non-Critical'}
+                  <span className="px-2.5 py-1 rounded-full bg-white/90 text-[#334155] text-[10px] font-extrabold uppercase tracking-wider border border-black/5 shadow-2xs">
+                    {cat.id === 'blood' ? '🩸 Matching Engine' : 'Direct Dispatch'}
                   </span>
                 )}
               </div>
@@ -437,10 +460,10 @@ export default function InstantReport({ onRequestCreated }) {
               {/* Bottom: Label & Description */}
               <div className="mt-3">
                 <div className="flex items-center justify-between">
-                  <h3 className="text-sm sm:text-base font-extrabold text-[#0F172A] group-hover:text-[#991B1B] transition">
-                    {cat.label}
+                  <h3 className="text-sm sm:text-base font-extrabold text-[#0F172A] group-hover:text-[#B91C1C] transition flex items-center gap-1">
+                    <span>{cat.label}</span>
                   </h3>
-                  <ChevronRight className="w-4 h-4 text-[#475569] group-hover:translate-x-1 transition" />
+                  <ChevronRight className="w-4 h-4 text-[#475569] group-hover:translate-x-1.5 transition" />
                 </div>
                 <p className="text-[11px] text-[#475569] mt-0.5 leading-snug font-medium line-clamp-2">
                   {cat.desc}

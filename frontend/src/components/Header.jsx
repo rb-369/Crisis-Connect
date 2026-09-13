@@ -129,15 +129,18 @@ export default function Header({
             </div>
             <div>
               <div className="flex items-center space-x-2">
-                <span className="font-extrabold text-lg sm:text-xl tracking-tight text-white">
+                <span className="font-extrabold text-lg sm:text-xl tracking-tight text-white flex items-center">
                   Crisis<span className="text-red-500">Connect</span>
                 </span>
-                <span className="hidden sm:inline-flex px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-slate-800 text-slate-300 border border-slate-700">
-                  SOS Platform
+                <span className="hidden sm:inline-flex items-center space-x-1 px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-red-950/80 text-red-300 border border-red-500/30">
+                  <span className="w-1.5 h-1.5 rounded-full bg-red-400 animate-ping" />
+                  <span>Disaster AI Mesh</span>
                 </span>
               </div>
-              <p className="text-[11px] text-slate-400 font-medium leading-none hidden md:block">
-                Emergency Triage & Humanitarian Coordination
+              <p className="text-[11px] text-slate-400 font-medium leading-none hidden md:flex items-center gap-1.5 mt-0.5">
+                <span>Autonomous Emergency Triage &amp; Volunteer Dispatch</span>
+                <span className="text-slate-600">&bull;</span>
+                <span className="text-emerald-400 font-mono text-[10px]">Mumbai Region</span>
               </p>
             </div>
           </div>
@@ -151,14 +154,17 @@ export default function Header({
                 <button
                   key={tab.id}
                   onClick={() => onTabChange(tab.id)}
-                  className={`relative flex items-center space-x-1.5 px-3 py-2 rounded-lg text-xs sm:text-sm font-bold transition-all whitespace-nowrap ${
+                  className={`relative flex items-center space-x-1.5 px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all whitespace-nowrap cursor-pointer ${
                     isActive
-                      ? 'bg-slate-800 text-white shadow-sm border border-slate-700'
-                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+                      ? 'bg-slate-800 text-white shadow-sm border border-slate-600 ring-1 ring-white/10'
+                      : 'text-slate-400 hover:text-slate-100 hover:bg-slate-800/60'
                   }`}
                 >
-                  <Icon className={`w-4 h-4 ${isActive ? 'text-red-400' : 'text-slate-400'}`} />
+                  <Icon className={`w-4 h-4 ${isActive ? 'text-red-400 animate-pulse' : 'text-slate-400'}`} />
                   <span>{tab.label}</span>
+                  {isActive && (
+                    <span className="w-1.5 h-1.5 rounded-full bg-red-500 ml-1 hidden lg:inline-block" />
+                  )}
                 </button>
               );
             })}
@@ -167,15 +173,15 @@ export default function Header({
           {/* Right Status & Quick Reseed */}
           <div className="flex items-center space-x-2.5">
             {/* Live WebSocket Indicator */}
-            <div className="flex items-center space-x-1.5 px-2.5 py-1 rounded-full bg-slate-800 border border-slate-700 text-xs">
+            <div className="flex items-center space-x-1.5 px-2.5 py-1 rounded-full bg-slate-800/90 border border-slate-700 text-xs shadow-inner">
               <span className={`w-2 h-2 rounded-full ${
                 wsStatus === 'connected'
-                  ? 'bg-emerald-400 animate-ping-slow'
+                  ? 'bg-emerald-400 beacon-radar-pulse'
                   : wsStatus === 'connecting'
                   ? 'bg-amber-400 animate-pulse'
                   : 'bg-red-500'
               }`} />
-              <span className="text-[11px] font-mono text-slate-300 hidden md:inline">
+              <span className="text-[11px] font-mono text-slate-300 font-bold hidden md:inline">
                 {wsStatus === 'connected' ? 'WS Live' : wsStatus === 'connecting' ? 'WS Syncing' : 'WS Offline'}
               </span>
             </div>
@@ -183,8 +189,8 @@ export default function Header({
             {/* Reseed Demo Button */}
             <button
               onClick={onReseed}
-              title="Reseed Realistic Demo Incidents"
-              className="p-2 rounded-lg text-slate-400 hover:text-white bg-slate-800 hover:bg-slate-700 border border-slate-700 transition"
+              title="Reseed Realistic Demo Incidents & Scenarios"
+              className="p-2 rounded-xl text-slate-400 hover:text-white bg-slate-800 hover:bg-slate-700 border border-slate-700 transition cursor-pointer shadow-xs"
             >
               <RotateCcw className="w-4 h-4" />
             </button>

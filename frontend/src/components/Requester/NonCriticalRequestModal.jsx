@@ -370,8 +370,8 @@ export default function NonCriticalRequestModal({ category, coords, onClose, onR
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-sm overflow-y-auto animate-fadeIn">
-      <div className="bg-white rounded-3xl shadow-2xl border border-[#CBD5E1] w-full max-w-2xl max-h-[92vh] flex flex-col overflow-hidden my-auto">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/60 backdrop-blur-sm overflow-y-auto animate-fadeIn">
+      <div className="bg-white rounded-2xl sm:rounded-3xl shadow-2xl border border-[#CBD5E1] w-full max-w-2xl max-h-[92dvh] sm:max-h-[90vh] flex flex-col overflow-hidden my-auto">
         
         {/* Modal Header */}
         <div className={`p-4 sm:p-5 border-b flex items-start justify-between ${meta.headerBg}`}>
@@ -467,19 +467,19 @@ export default function NonCriticalRequestModal({ category, coords, onClose, onR
                   <label className="block text-xs font-bold text-[#0F172A] mb-1">
                     Units of Blood / Plasma Required
                   </label>
-                  <div className="flex space-x-2">
+                  <div className="grid grid-cols-5 gap-1.5">
                     {[1, 2, 3, 4, 6].map((u) => (
                       <button
                         type="button"
                         key={u}
                         onClick={() => setBloodUnits(u)}
-                        className={`flex-1 py-1.5 rounded-xl border text-xs font-black transition ${
+                        className={`py-1.5 rounded-xl border text-xs font-black transition text-center ${
                           bloodUnits === u 
-                            ? 'bg-[#DC2626] border-[#DC2626] text-white shadow-sm' 
+                            ? 'bg-[#DC2626] border-[#DC2626] text-white shadow-xs' 
                             : 'bg-white border-[#CBD5E1] text-[#475569] hover:bg-[#F1F5F9]'
                         }`}
                       >
-                        {u} {u === 1 ? 'Unit' : 'Units'}
+                        {u} {u === 1 ? 'U' : 'U'}
                       </button>
                     ))}
                   </div>
@@ -572,16 +572,16 @@ export default function NonCriticalRequestModal({ category, coords, onClose, onR
               </div>
 
               {/* Demo Oxygen Test Button */}
-              <div className="flex items-center justify-between bg-cyan-50/60 p-2 rounded-xl border border-cyan-100">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 bg-cyan-50/60 p-2.5 rounded-xl border border-cyan-100">
                 <span className="text-[11px] text-cyan-900 font-medium flex items-center gap-1">
-                  <Sparkles className="w-3.5 h-3.5 text-cyan-600" />
-                  Need a sample oxygen prescription to test?
+                  <Sparkles className="w-3.5 h-3.5 text-cyan-600 flex-shrink-0" />
+                  <span>Need a sample oxygen prescription to test?</span>
                 </span>
                 <button
                   type="button"
                   onClick={() => handleLoadDemoPrescription('oxygen')}
                   disabled={isScanningOcr}
-                  className="text-[11px] px-2.5 py-1 bg-cyan-600 hover:bg-cyan-700 text-white font-bold rounded-lg transition shadow-xs flex items-center gap-1 cursor-pointer"
+                  className="text-[11px] px-2.5 py-1.5 bg-cyan-600 hover:bg-cyan-700 text-white font-bold rounded-lg transition shadow-xs flex items-center justify-center gap-1 cursor-pointer flex-shrink-0"
                 >
                   {isScanningOcr ? <Loader2 className="w-3 h-3 animate-spin" /> : '⚡ Test with Demo O2 Rx'}
                 </button>
@@ -676,16 +676,16 @@ export default function NonCriticalRequestModal({ category, coords, onClose, onR
               </div>
 
               {/* Demo Prescription Test Button */}
-              <div className="flex items-center justify-between bg-blue-50/70 p-2 rounded-xl border border-blue-100">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 bg-blue-50/70 p-2.5 rounded-xl border border-blue-100">
                 <span className="text-[11px] text-blue-900 font-medium flex items-center gap-1">
-                  <Sparkles className="w-3.5 h-3.5 text-blue-600" />
-                  Have no Rx image? Test free in-browser OCR:
+                  <Sparkles className="w-3.5 h-3.5 text-blue-600 flex-shrink-0" />
+                  <span>Have no Rx image? Test in-browser OCR:</span>
                 </span>
                 <button
                   type="button"
                   onClick={() => handleLoadDemoPrescription('medicine')}
                   disabled={isScanningOcr}
-                  className="text-[11px] px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg transition shadow-xs flex items-center gap-1 cursor-pointer"
+                  className="text-[11px] px-2.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg transition shadow-xs flex items-center justify-center gap-1 cursor-pointer flex-shrink-0"
                 >
                   {isScanningOcr ? <Loader2 className="w-3 h-3 animate-spin" /> : '⚡ Test with Demo Rx'}
                 </button>
@@ -953,11 +953,11 @@ export default function NonCriticalRequestModal({ category, coords, onClose, onR
           </div>
 
           {/* Action Buttons */}
-          <div className="pt-2 flex items-center justify-end space-x-3">
+          <div className="pt-2 flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-end gap-2.5 sm:space-x-3">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2.5 rounded-xl border border-[#CBD5E1] text-xs font-bold text-[#475569] hover:bg-[#F1F5F9] transition cursor-pointer"
+              className="w-full sm:w-auto px-4 py-2.5 rounded-xl border border-[#CBD5E1] text-xs font-bold text-[#475569] hover:bg-[#F1F5F9] transition cursor-pointer text-center"
             >
               Cancel
             </button>
@@ -965,7 +965,7 @@ export default function NonCriticalRequestModal({ category, coords, onClose, onR
             <button
               type="submit"
               disabled={isSubmitting}
-              className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-[#2563EB] to-[#1D4ED8] hover:from-[#1D4ED8] hover:to-[#1E40AF] text-white text-xs font-black uppercase tracking-wider flex items-center space-x-2 shadow-lg hover:shadow-blue-500/25 transition cursor-pointer"
+              className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-gradient-to-r from-[#2563EB] to-[#1D4ED8] hover:from-[#1D4ED8] hover:to-[#1E40AF] text-white text-xs font-black uppercase tracking-wider flex items-center justify-center space-x-2 shadow-lg hover:shadow-blue-500/25 transition cursor-pointer"
             >
               {isSubmitting ? (
                 <>

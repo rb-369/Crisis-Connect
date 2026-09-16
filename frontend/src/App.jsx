@@ -151,7 +151,7 @@ export default function App() {
       />
 
       {/* Main Content Viewport */}
-      <main className="flex-1 max-w-7xl w-full mx-auto p-3 sm:p-6 lg:px-8">
+      <main className="flex-1 max-w-7xl w-full mx-auto p-3 sm:p-6 lg:px-8 pb-24 md:pb-6">
         {/* Citizen 1-Tap Requester SOS */}
         {currentTab === 'requester' && (
           <div>
@@ -235,7 +235,7 @@ export default function App() {
       />
 
       {/* Footer */}
-      <footer className="border-t border-[#CBD5E1] bg-white py-4 px-6 text-xs text-[#64748B] font-medium">
+      <footer className="border-t border-[#CBD5E1] bg-white py-4 px-6 text-xs text-[#64748B] font-medium mb-16 md:mb-0">
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
           <div className="flex items-center space-x-2.5">
             <div className="w-7 h-7 rounded-lg bg-white p-0.5 border border-slate-300 shadow-xs flex items-center justify-center overflow-hidden flex-shrink-0">

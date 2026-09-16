@@ -216,27 +216,27 @@ export default function LiveStatusTracker({ initialRequest, onNewRequest, onCanc
   return (
     <div className="max-w-3xl mx-auto py-2 sm:py-6 px-2">
       {/* Top back button & WS status */}
-      <div className="flex flex-wrap items-center justify-between gap-2.5 mb-4">
-        <div className="flex items-center space-x-2">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 mb-4">
+        <div className="flex items-center gap-2 w-full sm:w-auto">
           <button
             onClick={onNewRequest}
-            className="flex items-center space-x-1.5 text-xs font-bold text-[#475569] hover:text-[#0F172A] bg-white px-3 py-1.5 rounded-xl border border-[#CBD5E1] shadow-xs transition cursor-pointer"
+            className="flex-1 sm:flex-initial flex items-center justify-center space-x-1.5 text-xs font-bold text-[#475569] hover:text-[#0F172A] bg-white px-3 py-2 rounded-xl border border-[#CBD5E1] shadow-xs transition cursor-pointer"
           >
             <ArrowLeft className="w-4 h-4 text-slate-500" />
-            <span>New Emergency Request</span>
+            <span>New Emergency</span>
           </button>
 
           <button
             onClick={() => setIsCancelModalOpen(true)}
-            className="flex items-center space-x-1.5 text-xs font-extrabold text-red-600 hover:text-red-700 bg-white hover:bg-red-50 px-3 py-1.5 rounded-xl border border-red-200 hover:border-red-300 shadow-xs transition cursor-pointer"
+            className="flex-1 sm:flex-initial flex items-center justify-center space-x-1.5 text-xs font-extrabold text-red-600 hover:text-red-700 bg-white hover:bg-red-50 px-3 py-2 rounded-xl border border-red-200 hover:border-red-300 shadow-xs transition cursor-pointer"
             title="Cancel this emergency request if submitted accidentally"
           >
             <XCircle className="w-4 h-4 text-red-500" />
-            <span>Cancel Emergency</span>
+            <span>Cancel</span>
           </button>
         </div>
 
-        <div className="flex items-center space-x-1.5 px-3 py-1 rounded-full bg-white border border-[#CBD5E1] text-[11px] font-mono text-[#475569] shadow-xs">
+        <div className="inline-flex items-center self-start sm:self-auto space-x-1.5 px-3 py-1 rounded-full bg-white border border-[#CBD5E1] text-[11px] font-mono text-[#475569] shadow-xs">
           <span className={`w-2 h-2 rounded-full ${wsStatus === 'connected' ? 'bg-[#16A34A] animate-ping-slow' : 'bg-[#D97706]'}`} />
           <span>Live Link: {wsStatus}</span>
         </div>
@@ -373,11 +373,11 @@ export default function LiveStatusTracker({ initialRequest, onNewRequest, onCanc
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2 flex-shrink-0">
+          <div className="flex flex-wrap sm:flex-nowrap items-center gap-2 flex-shrink-0 w-full sm:w-auto">
             <button
               onClick={handleHeartbeat}
               disabled={isHeartbeating}
-              className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-black shadow transition flex items-center space-x-1.5 cursor-pointer disabled:opacity-50"
+              className="flex-1 sm:flex-initial px-3.5 py-2 sm:py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-black shadow transition flex items-center justify-center space-x-1.5 cursor-pointer disabled:opacity-50"
             >
               <CheckCircle2 className={`w-3.5 h-3.5 ${isHeartbeating ? 'animate-spin' : ''}`} />
               <span>{isHeartbeating ? 'Updating...' : 'Still Waiting'}</span>
@@ -385,13 +385,13 @@ export default function LiveStatusTracker({ initialRequest, onNewRequest, onCanc
             <button
               onClick={handleConfirmResolution}
               disabled={isResolving}
-              className="px-3 py-1.5 rounded-xl bg-slate-700 hover:bg-slate-600 text-slate-300 text-xs font-bold transition cursor-pointer"
+              className="px-3 py-2 sm:py-1.5 rounded-xl bg-slate-700 hover:bg-slate-600 text-slate-300 text-xs font-bold transition cursor-pointer"
             >
               Help Received
             </button>
             <button
               onClick={() => setIsCancelModalOpen(true)}
-              className="px-3 py-1.5 rounded-xl bg-red-950/40 hover:bg-red-900/60 text-red-300 border border-red-500/40 text-xs font-bold transition cursor-pointer flex items-center space-x-1"
+              className="px-3 py-2 sm:py-1.5 rounded-xl bg-red-950/40 hover:bg-red-900/60 text-red-300 border border-red-500/40 text-xs font-bold transition cursor-pointer flex items-center justify-center space-x-1"
             >
               <XCircle className="w-3.5 h-3.5 text-red-400" />
               <span>Cancel</span>
@@ -665,7 +665,7 @@ export default function LiveStatusTracker({ initialRequest, onNewRequest, onCanc
             </h3>
 
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3.5">
+            <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-4 gap-2.5 sm:gap-3.5">
               {STATUS_STEPS.map((step, idx) => {
                 const Icon = step.icon;
                 const isPassed = idx < currentIndex;

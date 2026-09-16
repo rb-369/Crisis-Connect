@@ -259,3 +259,43 @@
   transform: translateY(1px) scale(0.99);
 }
 
+/* Mobile & Touch Ergonomics */
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Hide scrollbar for Chrome, Safari and Opera */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+/* Hide scrollbar for IE, Edge and Firefox */
+.no-scrollbar {
+  -ms-overflow-style: none;  /* IE and Edge */
+  scrollbar-width: none;  /* Firefox */
+}
+
+/* iOS Safe Area Padding Helpers */
+.pb-safe {
+  padding-bottom: max(1rem, env(safe-area-inset-bottom, 1rem));
+}
+.pb-safe-nav {
+  padding-bottom: max(4.5rem, calc(4.5rem + env(safe-area-inset-bottom, 0px)));
+}
+.pt-safe {
+  padding-top: max(0.5rem, env(safe-area-inset-top, 0.5rem));
+}
+
+/* Responsive Modal Constraints */
+@media (max-width: 640px) {
+  /* Prevent iOS automatic zoom on focus by ensuring input text is legible */
+  input[type="text"],
+  input[type="tel"],
+  input[type="email"],
+  input[type="number"],
+  textarea,
+  select {
+    font-size: 16px !important;
+  }
+}
+
+

@@ -619,6 +619,14 @@ export default function AdminMap() {
     }
   };
 
+  // Cancel emergency from map inspector
+  const handleMapCancel = (requestId) => {
+    const item = selectedItem?.id === requestId ? selectedItem : requests.find((r) => r.id === requestId);
+    if (item) {
+      promptRemovePin(item);
+    }
+  };
+
   // Fly map to specific request from sidebar
   const flyToRequest = (req) => {
     setSelectedItem(req);
@@ -692,7 +700,7 @@ export default function AdminMap() {
         </div>
 
         {/* Filters */}
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto no-scrollbar sm:flex-wrap pb-1 w-full sm:w-auto">
           {[
             { id: 'all', label: 'All Markers' },
             { id: 'urgent', label: '⚡ Critical SOS' },
@@ -703,7 +711,7 @@ export default function AdminMap() {
             <button
               key={f.id}
               onClick={() => setActiveFilter(f.id)}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition ${
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition whitespace-nowrap ${
                 activeFilter === f.id
                   ? 'bg-[#0F172A] text-white shadow-sm'
                   : 'bg-white text-[#475569] border border-[#CBD5E1] hover:bg-[#F1F5F9]'
@@ -715,7 +723,7 @@ export default function AdminMap() {
 
           <button
             onClick={loadData}
-            className="p-2 rounded-xl bg-white hover:bg-[#F1F5F9] border border-[#CBD5E1] text-[#475569] transition shadow-sm"
+            className="p-2 rounded-xl bg-white hover:bg-[#F1F5F9] border border-[#CBD5E1] text-[#475569] transition shadow-sm flex-shrink-0"
             title="Refresh Map Data"
           >
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
@@ -730,12 +738,11 @@ export default function AdminMap() {
         <div className="lg:col-span-7 bg-white rounded-2xl border border-[#CBD5E1] p-2 shadow-md relative flex flex-col justify-between">
           <div
             ref={mapContainer}
-            className="w-full h-[620px] rounded-xl overflow-hidden relative"
-            style={{ width: '100%', height: '620px' }}
+            className="w-full h-[360px] sm:h-[480px] lg:h-[620px] rounded-xl overflow-hidden relative"
           />
 
           {/* 5-Pin Dynamic Map Legend */}
-          <div className="absolute bottom-5 left-5 right-5 p-3.5 rounded-xl bg-white/95 backdrop-blur-md border border-[#CBD5E1] shadow-xl z-10">
+          <div className="mt-3 lg:absolute lg:bottom-5 lg:left-5 lg:right-5 p-2.5 sm:p-3.5 rounded-xl bg-white/95 backdrop-blur-md border border-[#CBD5E1] shadow-md lg:shadow-xl z-10">
             <div className="flex items-center justify-between border-b border-[#E2E8F0] pb-2 mb-2.5">
               <span className="text-[11px] font-black uppercase tracking-wider text-[#0F172A] flex items-center space-x-1.5">
                 <Sparkles className="w-3.5 h-3.5 text-[#2563EB]" />
@@ -806,7 +813,7 @@ export default function AdminMap() {
         </div>
 
         {/* Right: Synced Two-Way Feed & Inspector Drawer */}
-        <div className="lg:col-span-5 bg-white border border-[#CBD5E1] rounded-2xl p-5 shadow-md flex flex-col justify-between h-[636px]">
+        <div className="lg:col-span-5 bg-white border border-[#CBD5E1] rounded-2xl p-4 sm:p-5 shadow-md flex flex-col justify-between min-h-[380px] lg:h-[636px]">
           <div>
             <div className="flex items-center justify-between border-b border-[#E2E8F0] pb-3 mb-4">
               <h3 className="text-xs font-black uppercase tracking-wider text-[#0F172A] flex items-center space-x-2">

@@ -453,7 +453,7 @@ export default function MultiStepAuthModal({ isOpen, onClose, onAuthSuccess, def
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-3 sm:p-4 overflow-y-auto">
-      <div className="relative w-full max-w-2xl bg-white rounded-3xl shadow-2xl border border-[#CBD5E1] overflow-hidden my-auto animate-in fade-in zoom-in-95 duration-200">
+      <div className="relative w-full max-w-2xl bg-white rounded-3xl shadow-2xl border border-[#CBD5E1] overflow-hidden my-auto max-h-[92dvh] sm:max-h-[90vh] flex flex-col animate-in fade-in zoom-in-95 duration-200">
         
         {/* Top Dark Header */}
         <div className="bg-[#0F172A] text-white p-5 sm:p-6 relative">
@@ -526,7 +526,7 @@ export default function MultiStepAuthModal({ isOpen, onClose, onAuthSuccess, def
         </div>
 
         {/* Modal Body */}
-        <div className="p-5 sm:p-7 max-h-[72vh] overflow-y-auto">
+        <div className="p-4 sm:p-7 overflow-y-auto flex-1">
           
           {/* ========================================================
               MODE 1: QUICK SIGN IN / PRE-CONFIGURED DEMO ACCOUNTS

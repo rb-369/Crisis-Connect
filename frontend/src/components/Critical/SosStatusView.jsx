@@ -239,37 +239,37 @@ export default function SosStatusView({ result, onBack, onReturnHome, onCancelEm
       </div>
 
       {/* Hero Distress Card */}
-      <div className="p-6 sm:p-7 rounded-3xl bg-gradient-to-r from-[#DC2626] via-[#B91C1C] to-[#991B1B] text-white shadow-xl border-4 border-white/20 mb-5 relative overflow-hidden">
+      <div className="p-5 sm:p-7 rounded-2xl sm:rounded-3xl bg-gradient-to-r from-[#DC2626] via-[#B91C1C] to-[#991B1B] text-white shadow-xl border-2 sm:border-4 border-white/20 mb-5 relative overflow-hidden">
         <div className="absolute right-0 bottom-0 translate-x-8 translate-y-8 w-48 h-48 rounded-full bg-white/5 blur-xl pointer-events-none" />
         
         <div className="relative z-10">
           <div className="flex items-center justify-between gap-2 mb-2">
             <div className="flex items-center space-x-2.5">
-              <div className="w-10 h-10 rounded-2xl bg-white/15 backdrop-blur-md flex items-center justify-center shadow-inner">
-                <CategoryIcon className="w-6 h-6 text-white" />
+              <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-2xl bg-white/15 backdrop-blur-md flex items-center justify-center shadow-inner flex-shrink-0">
+                <CategoryIcon className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
               </div>
               <div>
                 <span className="text-[10px] font-black uppercase tracking-widest text-red-200">
                   Critical Emergency Beacon
                 </span>
-                <h1 className="text-xl sm:text-2xl font-black uppercase tracking-tight text-white drop-shadow-xs">
+                <h1 className="text-lg sm:text-2xl font-black uppercase tracking-tight text-white drop-shadow-xs leading-tight">
                   {incident.category} Emergency
                 </h1>
               </div>
             </div>
 
-            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/20 backdrop-blur-md text-white text-xs font-black uppercase tracking-wider shadow-xs">
-              <Gauge className="w-4 h-4 text-amber-300" />
-              <span>Priority {incident.priority}</span>
+            <div className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-xl bg-white/20 backdrop-blur-md text-white text-[11px] sm:text-xs font-black uppercase tracking-wider shadow-xs flex-shrink-0">
+              <Gauge className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-300" />
+              <span>P{incident.priority}</span>
             </div>
           </div>
 
-          <div className="mt-3 p-3 rounded-2xl bg-black/25 backdrop-blur-md border border-white/10 flex items-center justify-between">
-            <div className="flex items-center space-x-2 text-xs font-bold text-red-100">
-              <Radio className="w-4 h-4 text-emerald-400 animate-pulse" />
-              <span>Current Status: <strong className="text-white">{STATUS_LADDER[idx]?.label || incident.status}</strong></span>
+          <div className="mt-3 p-2.5 sm:p-3 rounded-xl sm:rounded-2xl bg-black/25 backdrop-blur-md border border-white/10 flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 sm:gap-2">
+            <div className="flex items-center space-x-2 text-xs font-bold text-red-100 truncate">
+              <Radio className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-emerald-400 animate-pulse flex-shrink-0" />
+              <span className="truncate">Status: <strong className="text-white">{STATUS_LADDER[idx]?.label || incident.status}</strong></span>
             </div>
-            <span className="text-xs font-mono font-bold text-emerald-300">
+            <span className="text-xs font-mono font-bold text-emerald-300 self-end sm:self-auto">
               {progressPercent}% Complete
             </span>
           </div>

@@ -803,7 +803,7 @@ export default function VolunteerMock({ currentUser, onOpenAuthModal }) {
           </div>
         </div>
 
-        <div className="flex items-center space-x-2">
+        <div className="flex items-center space-x-2 w-full sm:w-auto justify-between sm:justify-end">
           {/* View toggle */}
           <div className="flex rounded-xl bg-slate-800 border border-slate-700 p-1 text-xs font-bold">
             <button
@@ -1012,7 +1012,7 @@ export default function VolunteerMock({ currentUser, onOpenAuthModal }) {
               </div>
 
               {/* MapLibre Map Container */}
-              <div className="w-full h-[480px] rounded-xl overflow-hidden border border-[#CBD5E1] relative shadow-inner">
+              <div className="w-full h-[320px] sm:h-[480px] rounded-xl overflow-hidden border border-[#CBD5E1] relative shadow-inner">
                 <div
                   ref={mapContainer}
                   className="w-full h-full"
@@ -1020,7 +1020,7 @@ export default function VolunteerMock({ currentUser, onOpenAuthModal }) {
                 />
 
                 {/* Map Legend Overlay */}
-                <div className="absolute bottom-3 left-3 right-3 p-2.5 rounded-xl bg-white/95 backdrop-blur-md border border-[#CBD5E1] shadow-md flex flex-wrap items-center justify-between gap-2 text-[11px] z-10">
+                <div className="absolute bottom-2 left-2 right-2 sm:bottom-3 sm:left-3 sm:right-3 p-2 sm:p-2.5 rounded-xl bg-white/95 backdrop-blur-md border border-[#CBD5E1] shadow-md flex flex-wrap items-center justify-between gap-1.5 sm:gap-2 text-[10px] sm:text-[11px] z-10">
                   <div className="flex items-center space-x-2.5 font-bold text-[#0F172A]">
                     <span className="flex items-center space-x-1">
                       <span className="w-3 h-3 rounded-full bg-[#2563EB] inline-block border border-white shadow-xs" />
@@ -1145,7 +1145,7 @@ export default function VolunteerMock({ currentUser, onOpenAuthModal }) {
                             : 'bg-[#F8FAFC] border-[#CBD5E1]'
                         }`}
                       >
-                        <div className="flex items-start justify-between gap-3">
+                        <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
                           <div>
                             <div className="flex flex-wrap items-center gap-1.5 mb-1.5">
                               <span className="font-black uppercase text-[#991B1B] bg-red-100 px-2 py-0.5 rounded-md text-[10px]">
@@ -1264,11 +1264,11 @@ export default function VolunteerMock({ currentUser, onOpenAuthModal }) {
                           </div>
 
                           {/* Accept Button with Concurrency & Compatibility Lock */}
-                          <div className="flex flex-col items-end flex-shrink-0">
+                          <div className="flex sm:flex-col items-stretch sm:items-end flex-shrink-0 w-full sm:w-auto mt-2 sm:mt-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-200/70">
                             <button
                               onClick={() => handleAccept(r)}
                               disabled={isMatched || isResolved || (!isCompatible && isBlood && donorBlood)}
-                              className={`px-3.5 py-2 rounded-xl font-black text-xs transition cursor-pointer shadow-sm flex items-center space-x-1.5 ${
+                              className={`w-full sm:w-auto justify-center px-3.5 py-2 rounded-xl font-black text-xs transition cursor-pointer shadow-sm flex items-center space-x-1.5 ${
                                 isResolved
                                   ? 'bg-slate-200 text-slate-500 cursor-not-allowed shadow-none'
                                   : isMatched
@@ -1311,7 +1311,7 @@ export default function VolunteerMock({ currentUser, onOpenAuthModal }) {
         </div>
 
         {/* Right 5 Cols: Active Mission Controls & Live Chat */}
-        <div className="lg:col-span-5 bg-white border border-[#CBD5E1] p-5 rounded-2xl shadow-sm flex flex-col justify-between min-h-[560px]">
+        <div className="lg:col-span-5 bg-white border border-[#CBD5E1] p-4 sm:p-5 rounded-2xl shadow-sm flex flex-col justify-between min-h-[380px] lg:min-h-[560px]">
           <div>
             <div className="flex items-center justify-between border-b border-[#E2E8F0] pb-3 mb-4">
               <h4 className="text-xs font-black uppercase tracking-wider text-[#0F172A] flex items-center space-x-1.5">

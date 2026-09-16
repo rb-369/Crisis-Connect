@@ -219,46 +219,46 @@ export default function InstantReport({ onRequestCreated }) {
       {/* =========================================================================
           1. THE MOST IMPORTANT MASTER EMERGENCY SOS BUTTON (CENTRAL & PROMINENT)
          ========================================================================= */}
-      <div className="mb-6">
+      <div className="mb-5 sm:mb-6">
         <button
           disabled={isSubmitting}
           onClick={handleMasterEmergencySOS}
-          className="w-full relative overflow-hidden group rounded-3xl p-6 sm:p-8 bg-gradient-to-br from-[#DC2626] via-[#B91C1C] to-[#7F1D1D] text-white glow-danger card-tactile border-4 border-white/25 text-left cursor-pointer transition-all duration-200"
+          className="w-full relative overflow-hidden group rounded-2xl sm:rounded-3xl p-5 sm:p-8 bg-gradient-to-br from-[#DC2626] via-[#B91C1C] to-[#7F1D1D] text-white glow-danger card-tactile border-2 sm:border-4 border-white/25 text-left cursor-pointer transition-all duration-200"
         >
           {/* Animated Background Radar Waves */}
-          <div className="absolute -right-12 -bottom-12 w-72 h-72 rounded-full bg-white/10 blur-2xl group-hover:scale-150 transition duration-700" />
-          <div className="absolute right-8 top-1/2 -translate-y-1/2 hidden md:flex items-center justify-center">
-            <div className="w-28 h-28 rounded-full bg-white/10 border-2 border-white/30 flex items-center justify-center beacon-radar-pulse">
-              <ShieldAlert className="w-14 h-14 text-white drop-shadow-md" />
+          <div className="absolute -right-12 -bottom-12 w-72 h-72 rounded-full bg-white/10 blur-2xl group-hover:scale-150 transition duration-700 pointer-events-none" />
+          <div className="absolute right-6 top-1/2 -translate-y-1/2 hidden md:flex items-center justify-center pointer-events-none">
+            <div className="w-24 lg:w-28 h-24 lg:h-28 rounded-full bg-white/10 border-2 border-white/30 flex items-center justify-center beacon-radar-pulse">
+              <ShieldAlert className="w-12 lg:w-14 h-12 lg:h-14 text-white drop-shadow-md" />
             </div>
           </div>
 
           <div className="relative z-10 max-w-xl">
-            <div className="flex items-center space-x-2.5 mb-2.5">
-              <span className="px-3.5 py-1 rounded-full bg-white text-[#DC2626] font-black text-xs uppercase tracking-widest flex items-center space-x-1.5 shadow-md">
+            <div className="flex flex-wrap items-center gap-2 mb-2">
+              <span className="px-3 py-1 rounded-full bg-white text-[#DC2626] font-black text-[11px] sm:text-xs uppercase tracking-widest flex items-center space-x-1.5 shadow-md">
                 <span className="w-2 h-2 rounded-full bg-[#DC2626] animate-ping" />
                 <span>Life-Critical Priority</span>
               </span>
-              <span className="text-xs font-mono text-red-100 font-extrabold bg-black/20 px-2.5 py-0.5 rounded-full border border-white/20 hidden sm:inline-flex items-center gap-1">
+              <span className="text-[11px] sm:text-xs font-mono text-red-100 font-extrabold bg-black/25 px-2.5 py-0.5 rounded-full border border-white/20 inline-flex items-center gap-1">
                 <Zap className="w-3 h-3 text-amber-300" />
                 <span>Zero Login &bull; 1-Tap Trigger</span>
               </span>
             </div>
 
-            <h1 className="text-3xl sm:text-5xl font-black tracking-tight leading-none text-white drop-shadow-md">
+            <h1 className="text-2xl sm:text-4xl lg:text-5xl font-black tracking-tight leading-none text-white drop-shadow-md mt-1">
               EMERGENCY SOS
             </h1>
 
-            <p className="text-xs sm:text-sm text-red-100 font-semibold mt-2.5 leading-relaxed max-w-md">
+            <p className="text-xs sm:text-sm text-red-100 font-semibold mt-2 leading-relaxed max-w-md">
               Instant life-saving rescue broadcast. Sends your live GPS coordinates directly to nearby volunteer responders and Darpan-verified NGO dispatch units.
             </p>
 
-            <div className="mt-5 flex flex-wrap items-center gap-3">
-              <div className="inline-flex items-center space-x-2.5 bg-white text-[#B91C1C] px-5 py-2.5 rounded-xl font-black text-xs uppercase tracking-wider group-hover:bg-red-50 group-hover:shadow-lg transition shadow-md">
+            <div className="mt-4 sm:mt-5 flex flex-col sm:flex-row sm:items-center gap-2.5 sm:gap-3">
+              <div className="w-full sm:w-auto inline-flex items-center justify-center space-x-2.5 bg-white text-[#B91C1C] px-4 sm:px-5 py-2.5 sm:py-3 rounded-xl font-black text-xs uppercase tracking-wider group-hover:bg-red-50 group-hover:shadow-lg transition shadow-md">
                 <Radio className="w-4 h-4 text-[#DC2626] animate-pulse" />
-                <span>Broadcast Master Distress Beacon Now &rarr;</span>
+                <span>Broadcast Distress Beacon Now &rarr;</span>
               </div>
-              <span className="text-[11px] text-red-200 font-medium">
+              <span className="text-[11px] text-red-200 font-medium text-center sm:text-left">
                 Accidental? Cancel instantly on the next screen
               </span>
             </div>
@@ -267,28 +267,28 @@ export default function InstantReport({ onRequestCreated }) {
       </div>
 
       {/* GPS Location Signal Bar */}
-      <div className="mb-6 p-4 rounded-2xl bg-white border border-[#CBD5E1] shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+      <div className="mb-5 sm:mb-6 p-3.5 sm:p-4 rounded-2xl bg-white border border-[#CBD5E1] shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="flex items-center space-x-3">
-          <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold shadow-xs ${
+          <div className={`w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center font-bold shadow-xs flex-shrink-0 ${
             gpsStatus === 'acquired' ? 'bg-[#DCFCE7] text-[#15803D]' : 'bg-[#FEF3C7] text-[#B45309]'
           }`}>
-            <LocateFixed className="w-5 h-5" />
+            <LocateFixed className="w-4 h-4 sm:w-5 sm:h-5" />
           </div>
-          <div>
-            <div className="font-extrabold text-xs sm:text-sm text-[#0F172A] flex items-center space-x-1.5">
-              <span>{gpsStatus === 'acquired' ? 'Exact GPS Location Locked' : gpsStatus === 'detecting' ? 'Acquiring GPS Signal...' : 'Location Calibrated (Mumbai Pin)'}</span>
+          <div className="min-w-0">
+            <div className="font-extrabold text-xs sm:text-sm text-[#0F172A] flex items-center space-x-1.5 truncate">
+              <span className="truncate">{gpsStatus === 'acquired' ? 'Exact GPS Locked' : gpsStatus === 'detecting' ? 'Acquiring GPS...' : 'Mumbai Pin Active'}</span>
               {gpsStatus === 'acquired' && (
-                <span className="w-2 h-2 rounded-full bg-[#15803D] inline-block animate-ping-slow" />
+                <span className="w-2 h-2 rounded-full bg-[#15803D] inline-block animate-ping-slow flex-shrink-0" />
               )}
             </div>
-            <div className="text-xs font-mono text-[#64748B]">
-              Coordinates: {Number(coords?.lat || 19.076).toFixed(5)}, {Number(coords?.lng || 72.8777).toFixed(5)} &bull; Accuracy: &plusmn;5m
+            <div className="text-[11px] font-mono text-[#64748B] truncate">
+              {Number(coords?.lat || 19.076).toFixed(4)}, {Number(coords?.lng || 72.8777).toFixed(4)} &bull; &plusmn;5m
             </div>
           </div>
         </div>
 
         {/* Quick Demo Preset Hotspots & Manual toggle */}
-        <div className="flex flex-wrap items-center gap-1.5">
+        <div className="flex flex-wrap items-center gap-1.5 sm:justify-end">
           <button
             onClick={() => {
               setCoords({ lat: 19.0178, lng: 72.8478 });
@@ -297,7 +297,7 @@ export default function InstantReport({ onRequestCreated }) {
             title="Calibrate to KEM Hospital Parel"
             className="text-[11px] font-bold px-2.5 py-1.5 rounded-lg bg-[#F1F5F9] hover:bg-[#E2E8F0] text-[#0F172A] border border-[#CBD5E1] transition cursor-pointer"
           >
-            🏥 KEM Hospital
+            🏥 KEM
           </button>
           <button
             onClick={() => {
@@ -307,13 +307,13 @@ export default function InstantReport({ onRequestCreated }) {
             title="Calibrate to Kurla Bail Bazar"
             className="text-[11px] font-bold px-2.5 py-1.5 rounded-lg bg-[#F1F5F9] hover:bg-[#E2E8F0] text-[#0F172A] border border-[#CBD5E1] transition cursor-pointer"
           >
-            🌊 Kurla West
+            🌊 Kurla
           </button>
           <button
             onClick={() => setShowManualCoords(!showManualCoords)}
-            className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-[#0F172A] hover:bg-slate-800 text-white transition flex items-center justify-center space-x-1 cursor-pointer"
+            className="text-xs font-semibold px-2.5 py-1.5 rounded-lg bg-[#0F172A] hover:bg-slate-800 text-white transition flex items-center justify-center space-x-1 cursor-pointer"
           >
-            <MapPin className="w-3.5 h-3.5 text-red-400" />
+            <MapPin className="w-3 h-3 text-red-400" />
             <span>{showManualCoords ? 'Done' : 'Calibrate'}</span>
           </button>
         </div>
